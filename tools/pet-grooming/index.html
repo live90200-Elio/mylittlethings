@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>員工快速查詢 — 寵美管理</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #f5f1ea;
+    color: #2a2a2a;
+    line-height: 1.5;
+  }
+  .app { max-width: 720px; margin: 0 auto; padding: 16px; min-height: 100vh; }
+  header { padding: 8px 4px 16px; }
+  h1 { font-size: 20px; font-weight: 700; color: #8a5a2b; }
+  .hint { font-size: 13px; color: #888; margin-top: 4px; }
+
+  .search {
+    position: sticky; top: 8px; z-index: 10;
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    padding: 12px; margin-bottom: 16px;
+  }
+  .search input {
+    width: 100%; font-size: 20px; padding: 12px 14px;
+    border: 2px solid #e8e0d4; border-radius: 10px;
+    outline: none; background: #fafaf7;
+  }
+  .search input:focus { border-color: #d89862; background: #fff; }
+  .search .meta { margin-top: 8px; font-size: 13px; color: #888; }
+
+  .card {
+    background: #fff; border-radius: 14px; padding: 16px;
+    margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .card.alert { border-left: 5px solid #e25555; }
+
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .name { font-size: 22px; font-weight: 700; }
+  .phone { font-size: 15px; color: #888; font-variant-numeric: tabular-nums; }
+
+  .pets { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .pet-chip {
+    background: #f2ebdd; color: #6b4a20; font-size: 14px;
+    padding: 4px 10px; border-radius: 20px;
+  }
+
+  .alerts { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .alert-chip {
+    background: #fbe4e4; color: #b02020; font-size: 14px; font-weight: 600;
+    padding: 4px 10px; border-radius: 6px; border: 1px solid #f4bcbc;
+  }
+
+  .balance {
+    margin-top: 14px; display: flex; align-items: baseline; justify-content: space-between;
+    background: #faf6ee; padding: 12px 14px; border-radius: 10px;
+  }
+  .balance .label { font-size: 14px; color: #8a7a5a; }
+  .balance .value { font-size: 28px; font-weight: 700; color: #8a5a2b; font-variant-numeric: tabular-nums; }
+  .balance .value.low { color: #e25555; }
+  .balance .value .unit { font-size: 16px; font-weight: 500; color: #a88968; margin-left: 2px; }
+
+  .notes { margin-top: 12px; padding: 10px 12px; background: #f9f7f2; border-radius: 8px; font-size: 15px; color: #555; }
+  .notes .tag { display: inline-block; background: #e8e0d4; color: #6b4a20; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 6px; }
+
+  .recent { margin-top: 12px; font-size: 13px; color: #888; }
+
+  .empty {
+    text-align: center; padding: 40px 20px; color: #888;
+  }
+  .empty .big { font-size: 48px; margin-bottom: 8px; }
+  .empty .title { font-size: 16px; font-weight: 600; color: #555; }
+  .empty .sub { font-size: 13px; margin-top: 4px; }
+
+  mark { background: #ffe89a; padding: 0 2px; border-radius: 3px; }
+
+  footer { margin-top: 32px; padding: 16px 4px; font-size: 12px; color: #aaa; text-align: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🐾 員工快速查詢</h1>
+    <div class="hint">輸入手機號、客戶姓名或寵物名，即時顯示結果</div>
+  </header>
+
+  <div class="search">
+    <input id="q" type="search" inputmode="search" placeholder="例：0912、小白、林小姐" autocomplete="off" autofocus>
+    <div class="meta" id="meta">共 <b id="total">0</b> 筆客戶資料</div>
+  </div>
+
+  <div id="results"></div>
+
+  <footer>V1 範例資料版 · 之後接 Google Sheets / Apps Script</footer>
+</div>
+
+<script>
+// ===== 範例資料：等 Google Sheets + Apps Script 上線後，改成 fetch(...) =====
+const CUSTOMERS = [
+  {
+    phone: "0912345678",
+    name: "林小姐",
+    pets: [{ name: "小白", breed: "馬爾濟斯" }],
+    alerts: ["兇"],
+    notes: "耳朵易發炎；剪毛時怕剪刀聲，要慢慢來。",
+    balance: 3200,
+    lastVisit: "2026-04-15",
+  },
+  {
+    phone: "0922888111",
+    name: "王先生",
+    pets: [{ name: "豆豆", breed: "柴犬" }, { name: "麻糬", breed: "柴犬" }],
+    alerts: [],
+    notes: "兩隻都很乖；豆豆尾巴不能剪太短。",
+    balance: 1500,
+    lastVisit: "2026-04-10",
+  },
+  {
+    phone: "0933556677",
+    name: "陳太太",
+    pets: [{ name: "Lucky", breed: "貴賓" }],
+    alerts: ["心臟病"],
+    notes: "剪毛過程要分段休息，不可吹風機長時間對著心臟。",
+    balance: 500,
+    lastVisit: "2026-03-28",
+  },
+  {
+    phone: "0955223344",
+    name: "張先生",
+    pets: [{ name: "奶茶", breed: "米克斯" }],
+    alerts: ["皮膚敏感"],
+    notes: "用低敏洗毛精，上次洗完有脫毛情形，請特別留意。",
+    balance: 0,
+    lastVisit: "2026-02-14",
+  },
+  {
+    phone: "0918762345",
+    name: "黃小姐",
+    pets: [{ name: "波波", breed: "博美" }],
+    alerts: [],
+    notes: "喜歡被摸下巴；剪完幫綁領結。",
+    balance: 2800,
+    lastVisit: "2026-04-18",
+  },
+  {
+    phone: "0987654321",
+    name: "李先生",
+    pets: [{ name: "阿肥", breed: "法鬥" }],
+    alerts: ["兇", "呼吸道敏感"],
+    notes: "短鼻犬不可泡澡太久；會咬人，需戴嘴套。",
+    balance: 4100,
+    lastVisit: "2026-04-20",
+  },
+  {
+    phone: "0966112233",
+    name: "吳媽媽",
+    pets: [{ name: "Milo", breed: "比熊" }],
+    alerts: [],
+    notes: "每月固定全套；偏好粉紅色蝴蝶結。",
+    balance: 6500,
+    lastVisit: "2026-04-12",
+  },
+  {
+    phone: "0977445566",
+    name: "鄭先生",
+    pets: [{ name: "哈利", breed: "黃金獵犬" }],
+    alerts: ["關節不好"],
+    notes: "年紀大（12 歲），上下美容桌要抱；洗澡不要站太久。",
+    balance: 1800,
+    lastVisit: "2026-04-05",
+  },
+];
+
+// ===== 畫面渲染 =====
+const qInput = document.getElementById("q");
+const resultsEl = document.getElementById("results");
+const totalEl = document.getElementById("total");
+totalEl.textContent = CUSTOMERS.length;
+
+function highlight(text, term) {
+  if (!term) return escapeHtml(text);
+  const safe = escapeHtml(text);
+  const safeTerm = escapeHtml(term).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return safe.replace(new RegExp(safeTerm, "gi"), (m) => `<mark>${m}</mark>`);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function match(c, term) {
+  if (!term) return true;
+  const t = term.toLowerCase();
+  if (c.phone.includes(t)) return true;
+  if (c.name.toLowerCase().includes(t)) return true;
+  if (c.pets.some((p) => p.name.toLowerCase().includes(t) || p.breed.toLowerCase().includes(t))) return true;
+  return false;
+}
+
+function render() {
+  const term = qInput.value.trim();
+  const list = CUSTOMERS.filter((c) => match(c, term));
+
+  if (list.length === 0) {
+    resultsEl.innerHTML = `
+      <div class="empty">
+        <div class="big">🔍</div>
+        <div class="title">查無此客戶</div>
+        <div class="sub">請確認是否為新客戶，或對照紙本</div>
+      </div>`;
+    return;
+  }
+
+  resultsEl.innerHTML = list.map((c) => {
+    const hasAlert = c.alerts && c.alerts.length > 0;
+    const low = c.balance > 0 && c.balance < 500;
+    const zero = c.balance === 0;
+    const balanceClass = zero || low ? "low" : "";
+
+    const petsHtml = c.pets.map((p) =>
+      `<span class="pet-chip">🐶 ${highlight(p.name, term)} · ${highlight(p.breed, term)}</span>`
+    ).join("");
+
+    const alertsHtml = hasAlert
+      ? `<div class="alerts">${c.alerts.map((a) => `<span class="alert-chip">⚠️ ${escapeHtml(a)}</span>`).join("")}</div>`
+      : "";
+
+    return `
+      <div class="card ${hasAlert ? "alert" : ""}">
+        <div class="row">
+          <div class="name">${highlight(c.name, term)}</div>
+          <div class="phone">${highlight(c.phone, term)}</div>
+        </div>
+        <div class="pets">${petsHtml}</div>
+        ${alertsHtml}
+        <div class="balance">
+          <span class="label">儲值金餘額</span>
+          <span class="value ${balanceClass}">${c.balance.toLocaleString()}<span class="unit">元</span></span>
+        </div>
+        <div class="notes"><span class="tag">備註</span>${escapeHtml(c.notes)}</div>
+        <div class="recent">最近到店：${c.lastVisit}</div>
+      </div>`;
+  }).join("");
+}
+
+qInput.addEventListener("input", render);
+render();
+</script>
+</body>
+</html>
