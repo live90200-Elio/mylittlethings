@@ -1,0 +1,19 @@
+{
+  "name": "寵美老闆儀表板",
+  "short_name": "老闆",
+  "description": "寵美管理 — 老闆私藏儀表板",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1724",
+  "theme_color": "#0f1724",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
