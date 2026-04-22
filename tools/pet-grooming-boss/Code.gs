@@ -46,27 +46,49 @@ function doGet(e) {
     const records = readServiceRecords(serviceSheet, customerMap);
 
     const range = getPeriodRange(params.period || "current_month", params.from, params.to);
-    const filtered = records.filter((r) => r.date >= range.from && r.date <= range.to);
+
+    // 若 range.to 在未來（例如「本月」範圍是 4/1~4/30，但今天才 4/22），截到今天為止，
+    // 這樣和「去年同期」比較才公平（MTD vs 去年同期 MTD）
+    const now = new Date();
+    const effectiveTo = range.to > now ? now : range.to;
+    const filtered = records.filter((r) => r.date >= range.from && r.date <= effectiveTo);
 
     const totalRevenue = sumBy(filtered, "amount");
     const count = filtered.length;
 
+    // 去年同期（把兩端都減一年）
+    const lastYearFrom = new Date(range.from); lastYearFrom.setFullYear(lastYearFrom.getFullYear() - 1);
+    const lastYearTo = new Date(effectiveTo);   lastYearTo.setFullYear(lastYearTo.getFullYear() - 1);
+    const lastYearFiltered = records.filter((r) => r.date >= lastYearFrom && r.date <= lastYearTo);
+    const lastYearRevenue = sumBy(lastYearFiltered, "amount");
+    const lastYearCount = lastYearFiltered.length;
+    const growthPct = lastYearRevenue > 0
+      ? Math.round(((totalRevenue - lastYearRevenue) / lastYearRevenue) * 1000) / 10
+      : null;
+
+    const sortedRecords = filtered
+      .slice()
+      .sort((a, b) => b.date - a.date)
+      .map((r) => ({ ...r, date: formatDate(r.date) }));
+
     return json({
       period: {
         from: formatDate(range.from),
-        to: formatDate(range.to),
+        to: formatDate(effectiveTo),
         label: range.label,
       },
       totalRevenue: totalRevenue,
       transactionCount: count,
       avgPerTransaction: count ? Math.round(totalRevenue / count) : 0,
+      comparison: {
+        lastYearRevenue: lastYearRevenue,
+        lastYearCount: lastYearCount,
+        growthPct: growthPct,
+        label: "去年同期",
+      },
       byGroomer: groupBy(filtered, "groomer"),
       byPayment: groupBy(filtered, "payment"),
-      recent: filtered
-        .slice()
-        .sort((a, b) => b.date - a.date)
-        .slice(0, 15)
-        .map((r) => ({ ...r, date: formatDate(r.date) })),
+      records: sortedRecords,
       storedValuePool: getStoredValuePool(customerSheet),
       generatedAt: new Date().toISOString(),
     });

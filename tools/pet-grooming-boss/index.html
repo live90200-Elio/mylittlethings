@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>老闆私藏儀表板 — 寵美</title>
+
+<!-- 加到 iPhone 主畫面用 -->
+<meta name="theme-color" content="#0f1724">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="老闆">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="manifest" href="manifest.json">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -79,6 +88,10 @@
   .kpi-value { font-size: 28px; font-weight: 700; color: #e8d07a; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .kpi-value.small { font-size: 22px; color: #a8d8b9; }
   .kpi-sub { font-size: 11px; color: #6a7a8d; margin-top: 2px; }
+  .kpi-growth { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .kpi-growth.up { color: #a8d8b9; }
+  .kpi-growth.down { color: #ff6b6b; }
+  .kpi-growth.flat { color: #6a7a8d; }
 
   section { margin-bottom: 24px; }
   h2 { font-size: 16px; color: #e8ecf5; margin-bottom: 12px; padding-left: 8px; border-left: 3px solid #e8d07a; }
@@ -140,6 +153,7 @@
       <div class="period-label" id="periodLabel">—</div>
     </div>
     <div class="header-actions">
+      <button id="exportBtn" class="icon-btn" title="匯出本期交易為 CSV" disabled>📥</button>
       <button id="refreshBtn" class="icon-btn" title="重新整理">
         <span class="spin">🔄</span>
       </button>
@@ -157,7 +171,11 @@
   <div id="errorBox"></div>
 
   <div class="kpis">
-    <div class="kpi"><div class="kpi-label">總營收</div><div class="kpi-value" id="kpiRevenue">—</div></div>
+    <div class="kpi">
+      <div class="kpi-label">總營收</div>
+      <div class="kpi-value" id="kpiRevenue">—</div>
+      <div class="kpi-growth flat" id="kpiGrowth">—</div>
+    </div>
     <div class="kpi"><div class="kpi-label">交易筆數</div><div class="kpi-value" id="kpiCount">—</div></div>
     <div class="kpi"><div class="kpi-label">平均單筆</div><div class="kpi-value" id="kpiAvg">—</div></div>
     <div class="kpi">
@@ -188,7 +206,7 @@
 <script>
 // ===== 設定 =====
 // Apps Script 部署後拿到的 /exec 網址：
-const BOSS_API_URL = "";
+const BOSS_API_URL = "https://script.google.com/macros/s/AKfycbxoap78ObcCCUJ7m3OROMiey3j86QtlZOIOFc-RIiG_dCIGppLtSfH1ikCTFtD_njEL/exec";
 
 const STORAGE_KEY = "pet-grooming-boss-key";
 
@@ -200,6 +218,7 @@ const loginBtn = document.getElementById("loginBtn");
 const loginError = document.getElementById("loginError");
 const refreshBtn = document.getElementById("refreshBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const exportBtn = document.getElementById("exportBtn");
 const errorBox = document.getElementById("errorBox");
 const periodLabel = document.getElementById("periodLabel");
 const periodTabs = document.querySelectorAll(".period-tabs button");
@@ -207,6 +226,7 @@ const periodTabs = document.querySelectorAll(".period-tabs button");
 // ===== 狀態 =====
 let currentPeriod = "current_month";
 let currentKey = localStorage.getItem(STORAGE_KEY) || "";
+let currentData = null; // 最新一次 fetch 到的資料（給匯出 CSV 用）
 
 // ===== 啟動 =====
 if (currentKey) {
@@ -267,6 +287,7 @@ function logout() {
 }
 logoutBtn.addEventListener("click", logout);
 refreshBtn.addEventListener("click", () => loadPeriod(currentPeriod));
+exportBtn.addEventListener("click", exportCSV);
 
 periodTabs.forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -308,15 +329,34 @@ async function fetchData(key, period) {
 
 // ===== 渲染 =====
 function renderAll(d) {
+  currentData = d;
+  exportBtn.disabled = !(d.records && d.records.length);
+
   periodLabel.textContent = d.period ? d.period.label : "";
   document.getElementById("kpiRevenue").textContent = fmtMoney(d.totalRevenue);
   document.getElementById("kpiCount").textContent = (d.transactionCount || 0).toLocaleString();
   document.getElementById("kpiAvg").textContent = fmtMoney(d.avgPerTransaction);
   document.getElementById("kpiPool").textContent = fmtMoney(d.storedValuePool);
 
+  renderGrowth(d.comparison);
   renderBars("byGroomer", d.byGroomer, d.totalRevenue);
   renderBars("byPayment", d.byPayment, d.totalRevenue);
-  renderRecent(d.recent);
+  renderRecent((d.records || []).slice(0, 15));
+}
+
+function renderGrowth(c) {
+  const el = document.getElementById("kpiGrowth");
+  if (!c || c.growthPct === null || c.growthPct === undefined) {
+    el.className = "kpi-growth flat";
+    el.textContent = "去年同期無資料";
+    return;
+  }
+  const pct = c.growthPct;
+  const sign = pct > 0 ? "↑" : pct < 0 ? "↓" : "→";
+  const dir = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+  el.className = "kpi-growth " + dir;
+  el.textContent = `${sign} ${Math.abs(pct).toFixed(1)}% vs ${c.label}`;
+  el.title = `去年同期營收 ${fmtMoney(c.lastYearRevenue)} · ${c.lastYearCount} 筆`;
 }
 
 function renderBars(containerId, items, total) {
@@ -352,6 +392,37 @@ function renderRecent(list) {
       <div class="amt">${fmtMoney(r.amount)}<span class="pay">${escapeHtml(r.payment || "")}</span></div>
     </div>
   `).join("");
+}
+
+// ===== CSV 匯出 =====
+function exportCSV() {
+  if (!currentData || !currentData.records || !currentData.records.length) return;
+  const headers = ["日期", "主人電話", "主人姓名", "寵物名", "服務項目", "金額", "付款方式", "負責美容師", "備註"];
+  const rows = currentData.records.map((r) => [
+    r.date, r.phone, r.ownerName, r.petName, r.service, r.amount, r.payment, r.groomer, r.notes,
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\r\n");
+  // 加 BOM 讓 Excel 正確識別 UTF-8
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const label = (currentData.period && currentData.period.label) || "本期";
+  const filename = `寵美交易_${safeFilename(label)}.csv`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+function csvEscape(v) {
+  const s = v == null ? "" : String(v);
+  if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function safeFilename(s) {
+  return String(s).replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "");
 }
 
 // ===== 工具 =====
