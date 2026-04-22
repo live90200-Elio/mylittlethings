@@ -15,8 +15,9 @@
 - 🔥 Firebase 專案：`my-teaching-tools`（或你建的，資料的家）
 
 ## 工具清單
-（之後加新工具時會自動更新）
-- （尚無）
+- **寵美管理：員工快速查詢頁**（`tools/pet-grooming/`）— 店內平板用，輸入電話查客戶歷史與儲值餘額
+- **寵美管理：老闆私藏儀表板**（`tools/pet-grooming-boss/`）— BOSS_KEY 密碼登入，KPI + 月對月成長 + CSV 匯出 + PWA
+- **預約小幫手**（`tools/appointment-helper/`）— 抓 Google 日曆明日預約，產員工清單 + 客戶提醒草稿，一鍵複製
 
 ## 工作注意事項
 - 學生資料一律去識別化（只用座號 + 班級代號）

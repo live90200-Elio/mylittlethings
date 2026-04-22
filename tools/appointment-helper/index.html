@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>預約小幫手 — 寵美</title>
+<meta name="theme-color" content="#0f1724">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #0f1724; color: #e8ecf5; line-height: 1.55;
+  }
+  .app { max-width: 960px; margin: 0 auto; padding: 16px; }
+
+  /* ===== 登入畫面 ===== */
+  .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .login-card {
+    background: #1a2332; border-radius: 14px; padding: 32px;
+    width: 100%; max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  }
+  .login h1 { font-size: 22px; margin-bottom: 8px; color: #7ac8e8; }
+  .login .sub { font-size: 13px; color: #8a9aad; margin-bottom: 24px; }
+  .login input {
+    width: 100%; font-size: 16px; padding: 12px 14px; margin-bottom: 12px;
+    border: 1px solid #2d3b52; border-radius: 8px; background: #0f1724; color: #e8ecf5;
+    outline: none;
+  }
+  .login input:focus { border-color: #7ac8e8; }
+  .login button {
+    width: 100%; padding: 12px; font-size: 16px; font-weight: 600;
+    background: #7ac8e8; color: #0f1724; border: none; border-radius: 8px; cursor: pointer;
+  }
+  .login button:hover { background: #9bd6ee; }
+  .login button:disabled { opacity: .5; cursor: wait; }
+  .login .error { color: #ff6b6b; font-size: 13px; margin-top: 8px; min-height: 18px; }
+
+  /* ===== 主畫面 ===== */
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 8px 4px 16px; flex-wrap: wrap; }
+  h1.title { font-size: 22px; color: #7ac8e8; }
+  .date-label { font-size: 14px; color: #e8ecf5; margin-top: 4px; }
+  .date-label .sub { color: #8a9aad; font-size: 12px; }
+  .header-actions { display: flex; gap: 8px; }
+  .icon-btn {
+    background: #1a2332; border: 1px solid #2d3b52; color: #e8ecf5;
+    padding: 8px 12px; font-size: 14px; border-radius: 8px; cursor: pointer;
+  }
+  .icon-btn:hover { background: #24324a; }
+  .icon-btn:disabled { opacity: .5; cursor: wait; }
+  .icon-btn.loading .spin { animation: spin 1s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  section { margin-bottom: 24px; }
+  h2 { font-size: 16px; color: #e8ecf5; margin-bottom: 12px; padding-left: 8px; border-left: 3px solid #7ac8e8; }
+  h2.warn { border-left-color: #ff9a5c; }
+
+  .card {
+    background: #1a2332; border-radius: 12px; padding: 16px;
+    border: 1px solid #2d3b52;
+  }
+
+  /* 員工清單區塊 */
+  .staff-box {
+    background: #0f1724; border: 1px solid #2d3b52; border-radius: 8px;
+    padding: 12px; font-family: -apple-system, "SF Mono", "Menlo", monospace;
+    font-size: 14px; color: #e8ecf5; white-space: pre-wrap; word-break: break-word;
+    margin-bottom: 12px; min-height: 60px;
+  }
+  .primary-btn {
+    background: #7ac8e8; color: #0f1724; border: none; border-radius: 8px;
+    padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+    width: 100%;
+  }
+  .primary-btn:hover { background: #9bd6ee; }
+  .primary-btn.copied { background: #a8d8b9; }
+
+  /* 客戶提醒卡片 */
+  .reminder-list { display: flex; flex-direction: column; gap: 12px; }
+  .reminder-card {
+    background: #1a2332; border-radius: 12px; padding: 14px;
+    border: 1px solid #2d3b52;
+  }
+  .reminder-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    flex-wrap: wrap; gap: 8px; margin-bottom: 4px;
+  }
+  .reminder-head .owner {
+    font-size: 16px; font-weight: 700; color: #e8d07a;
+  }
+  .reminder-head .phone {
+    font-size: 13px; color: #8a9aad; font-variant-numeric: tabular-nums;
+  }
+  .reminder-head .phone a { color: #8a9aad; text-decoration: none; }
+  .reminder-head .phone a:hover { color: #7ac8e8; }
+  .reminder-sub { font-size: 13px; color: #8a9aad; margin-bottom: 10px; }
+  .reminder-sub .cut { color: #e8d07a; }
+  .reminder-msg {
+    background: #0f1724; border: 1px solid #2d3b52; border-radius: 8px;
+    padding: 10px 12px; font-size: 14px; white-space: pre-wrap; word-break: break-word;
+    margin-bottom: 10px; color: #e8ecf5;
+  }
+  .copy-btn {
+    background: #24324a; color: #e8ecf5; border: 1px solid #2d3b52;
+    border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+  }
+  .copy-btn:hover { background: #2d3b52; }
+  .copy-btn.copied { background: #2d5a3f; border-color: #3d7a56; color: #a8d8b9; }
+
+  /* 未處理清單（紅橘警告） */
+  .missing-card {
+    background: #2a1f15; border: 1px solid #5a3f28; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 8px; font-size: 14px; color: #ffcfa0;
+  }
+  .missing-card strong { color: #ffb366; }
+  .missing-card .reason { font-size: 12px; color: #c99874; margin-top: 2px; }
+
+  /* 空狀態 + 錯誤 */
+  .empty-state { text-align: center; padding: 30px; color: #6a7a8d; font-size: 14px; }
+  .error-box {
+    background: #3d1a1a; border: 1px solid #6b2a2a; color: #ffb8b8;
+    padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
+  }
+
+  footer { padding: 20px 4px; font-size: 11px; color: #4a5a6d; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ===== 登入畫面 ===== -->
+<div id="loginScreen" class="login">
+  <div class="login-card">
+    <h1>📅 預約小幫手</h1>
+    <div class="sub">輸入密碼進入</div>
+    <input type="password" id="keyInput" placeholder="密碼" autocomplete="off">
+    <button id="loginBtn">進入</button>
+    <div class="error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ===== 主畫面 ===== -->
+<div id="dashboard" class="app" hidden>
+  <header>
+    <div>
+      <h1 class="title">📅 預約小幫手</h1>
+      <div class="date-label" id="dateLabel">載入中…</div>
+    </div>
+    <div class="header-actions">
+      <button id="refreshBtn" class="icon-btn" title="重新整理">
+        <span class="spin">🔄</span>
+      </button>
+      <button id="logoutBtn" class="icon-btn" title="登出">🚪</button>
+    </div>
+  </header>
+
+  <div id="errorBox"></div>
+
+  <section>
+    <h2>📋 員工清單（貼到員工群組）</h2>
+    <div class="card">
+      <div class="staff-box" id="staffContent">載入中…</div>
+      <button id="copyStaffBtn" class="primary-btn" disabled>📋 複製全部</button>
+    </div>
+  </section>
+
+  <section id="remindersSection">
+    <h2>💬 客戶提醒草稿（逐筆貼給客戶）</h2>
+    <div class="reminder-list" id="remindersList">
+      <div class="empty-state">載入中…</div>
+    </div>
+  </section>
+
+  <section id="missingSection" hidden>
+    <h2 class="warn">⚠️ 需要手動通知（查無主人）</h2>
+    <div id="missingList"></div>
+  </section>
+
+  <footer>🐾 每天早上來看明天的預約，複製貼上兩次就搞定</footer>
+</div>
+
+<script>
+// ===== 設定 =====
+// Apps Script 部署後拿到的 /exec 網址：
+const APPT_API_URL = "";
+
+const STORAGE_KEY = "appointment-helper-key";
+
+// ===== DOM =====
+const loginScreen = document.getElementById("loginScreen");
+const dashboard = document.getElementById("dashboard");
+const keyInput = document.getElementById("keyInput");
+const loginBtn = document.getElementById("loginBtn");
+const loginError = document.getElementById("loginError");
+const refreshBtn = document.getElementById("refreshBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const errorBox = document.getElementById("errorBox");
+const dateLabel = document.getElementById("dateLabel");
+const staffContent = document.getElementById("staffContent");
+const copyStaffBtn = document.getElementById("copyStaffBtn");
+const remindersList = document.getElementById("remindersList");
+const missingSection = document.getElementById("missingSection");
+const missingList = document.getElementById("missingList");
+
+// ===== 狀態 =====
+let currentKey = localStorage.getItem(STORAGE_KEY) || "";
+let currentData = null;
+
+// ===== 啟動 =====
+if (currentKey) enterDashboard();
+else showLogin();
+
+// ===== 登入 =====
+function showLogin() {
+  loginScreen.hidden = false;
+  dashboard.hidden = true;
+  keyInput.focus();
+}
+
+async function attemptLogin() {
+  const k = keyInput.value.trim();
+  if (!k) return;
+  loginBtn.disabled = true;
+  loginError.textContent = "";
+  try {
+    const res = await fetchData(k);
+    if (res.error) {
+      loginError.textContent = res.error === "auth_failed" ? "密碼錯誤" : res.error;
+      loginBtn.disabled = false;
+      return;
+    }
+    currentKey = k;
+    localStorage.setItem(STORAGE_KEY, k);
+    enterDashboard(res);
+  } catch (err) {
+    loginError.textContent = "連線失敗：" + err.message;
+    loginBtn.disabled = false;
+  }
+}
+
+loginBtn.addEventListener("click", attemptLogin);
+keyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") attemptLogin(); });
+
+function enterDashboard(preloaded) {
+  loginScreen.hidden = true;
+  dashboard.hidden = false;
+  if (preloaded) renderAll(preloaded);
+  else loadData();
+}
+
+function logout() {
+  localStorage.removeItem(STORAGE_KEY);
+  currentKey = "";
+  keyInput.value = "";
+  loginBtn.disabled = false;
+  loginError.textContent = "";
+  showLogin();
+}
+logoutBtn.addEventListener("click", logout);
+refreshBtn.addEventListener("click", loadData);
+copyStaffBtn.addEventListener("click", copyStaff);
+
+async function loadData() {
+  refreshBtn.classList.add("loading");
+  refreshBtn.disabled = true;
+  errorBox.innerHTML = "";
+  try {
+    const data = await fetchData(currentKey);
+    if (data.error) {
+      if (data.error === "auth_failed") { logout(); return; }
+      throw new Error(data.error);
+    }
+    renderAll(data);
+  } catch (err) {
+    errorBox.innerHTML = `<div class="error-box">⚠️ 讀取失敗：${escapeHtml(err.message)}</div>`;
+  } finally {
+    refreshBtn.classList.remove("loading");
+    refreshBtn.disabled = false;
+  }
+}
+
+async function fetchData(key) {
+  if (!APPT_API_URL) {
+    throw new Error("尚未設定 APPT_API_URL，請先部署 Apps Script 並把網址貼進 index.html");
+  }
+  const url = `${APPT_API_URL}?key=${encodeURIComponent(key)}`;
+  const res = await fetch(url, { redirect: "follow" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ===== 渲染 =====
+function renderAll(d) {
+  currentData = d;
+
+  const dw = d.dayWord || "明天";
+  dateLabel.innerHTML = `<strong>${escapeHtml(dw)} ${escapeHtml(d.dateLabel)} (${escapeHtml(d.weekday)})</strong> · <span class="sub">${d.totalCount} 件預約</span>`;
+
+  // 員工清單
+  staffContent.textContent = d.staffSummary || "(無)";
+  copyStaffBtn.disabled = !d.staffSummary || d.totalCount === 0;
+  copyStaffBtn.classList.remove("copied");
+  copyStaffBtn.textContent = "📋 複製全部";
+
+  // 客戶提醒
+  if (!d.reminders || d.reminders.length === 0) {
+    remindersList.innerHTML = `<div class="empty-state">${d.totalCount === 0 ? "明天無預約 🌿" : "（沒有可自動提醒的客戶 — 請看下方手動處理區）"}</div>`;
+  } else {
+    remindersList.innerHTML = d.reminders.map(renderReminderCard).join("");
+    bindCopyButtons();
+  }
+
+  // 未處理
+  if (d.missingPhone && d.missingPhone.length > 0) {
+    missingSection.hidden = false;
+    missingList.innerHTML = d.missingPhone.map(renderMissingCard).join("");
+  } else {
+    missingSection.hidden = true;
+    missingList.innerHTML = "";
+  }
+}
+
+function renderReminderCard(r) {
+  const cutTag = r.isHaircut ? ' · <span class="cut">剪毛 ✂️</span>' : " · 洗澡";
+  const phoneDigits = r.phone;
+  const phoneDisplay = formatPhone(r.phone);
+  return `
+    <div class="reminder-card">
+      <div class="reminder-head">
+        <div class="owner">${escapeHtml(r.ownerName)}</div>
+        <div class="phone"><a href="tel:${escapeHtml(phoneDigits)}">📞 ${escapeHtml(phoneDisplay)}</a></div>
+      </div>
+      <div class="reminder-sub">${escapeHtml(r.petName)} · ${escapeHtml(r.time)}${cutTag}</div>
+      <div class="reminder-msg">${escapeHtml(r.message)}</div>
+      <button class="copy-btn" data-text="${escapeAttr(r.message)}">📋 複製此則</button>
+    </div>`;
+}
+
+function renderMissingCard(m) {
+  const cut = m.isHaircut ? " ✂️" : "";
+  return `
+    <div class="missing-card">
+      <strong>${escapeHtml(m.petName)}${cut}</strong> · ${escapeHtml(m.time)} · ${escapeHtml(m.service)}
+      <div class="reason">${escapeHtml(m.reason)}${m.phone ? `（描述欄電話：${escapeHtml(m.phone)}）` : ""}</div>
+    </div>`;
+}
+
+function bindCopyButtons() {
+  document.querySelectorAll(".copy-btn").forEach((btn) => {
+    btn.addEventListener("click", () => copyToClipboard(btn.dataset.text, btn, "📋 複製此則"));
+  });
+}
+
+function copyStaff() {
+  if (!currentData || !currentData.staffSummary) return;
+  copyToClipboard(currentData.staffSummary, copyStaffBtn, "📋 複製全部");
+}
+
+async function copyToClipboard(text, btn, originalLabel) {
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.classList.add("copied");
+    btn.textContent = "✅ 已複製，去貼上吧";
+    setTimeout(() => {
+      btn.classList.remove("copied");
+      btn.textContent = originalLabel;
+    }, 1800);
+  } catch (err) {
+    alert("複製失敗（請手動選取）：" + err.message);
+  }
+}
+
+// ===== 工具 =====
+function formatPhone(p) {
+  if (!p || p.length !== 10) return p || "";
+  return `${p.slice(0, 4)}-${p.slice(4, 7)}-${p.slice(7)}`;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function escapeAttr(s) {
+  return escapeHtml(s).replace(/\n/g, "&#10;");
+}
+</script>
+</body>
+</html>
