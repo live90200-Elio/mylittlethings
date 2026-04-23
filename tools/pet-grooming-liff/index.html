@@ -246,11 +246,13 @@
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@5.0.4/dist/signature_pad.umd.min.js"></script>
 
 <script>
-  // ========== ⚠️ 必改區 ==========
-  const LIFF_ID = "2009881783-3lqVJdS9";                  // LINE Developers Console → LIFF app 建好後填
-  const LIFF_API_URL = "https://script.google.com/macros/s/AKfycbx99cUYpq2gC5KjndYNQr_c9OWUrBvkREQo9YKT9J0a9NWgA6TMhOfC-c_KcA6Ya13j/exec";        // Apps Script 部署後的網址（到 /exec）
-  const LIFF_KEY = "change-me-to-random-long-string";     // 跟 Apps Script 裡 Code.gs 的 LIFF_KEY 對上
-  // ================================
+  // ========== Apps Script 伺服器端注入（不要手改這三行） ==========
+  // 本檔透過 Apps Script doGet() 回傳，<?= ... ?> 由 server 填值。
+  // 直接瀏覽器打開本檔會看到原始模板語法 → 是預期行為。
+  const LIFF_ID = "<?= LIFF_ID ?>";
+  const LIFF_API_URL = "<?= LIFF_API_URL ?>";
+  const LIFF_KEY = "<?= LIFF_KEY ?>";
+  // =================================================================
 
   const $ = (id) => document.getElementById(id);
   const toast = (msg, isErr = false) => {
@@ -309,8 +311,8 @@
   async function initLiff() {
     const envNote = $("envNote");
     try {
-      if (!LIFF_ID || LIFF_ID === "LIFF_ID_PLACEHOLDER") {
-        envNote.textContent = "🧪 開發模式（未設定 LIFF ID，以 Web 表單模式執行）";
+      if (!LIFF_ID || LIFF_ID === "LIFF_ID_PLACEHOLDER" || LIFF_ID.startsWith("<?")) {
+        envNote.textContent = "🧪 開發模式（未透過 Apps Script 載入，以 Web 表單模式執行）";
         return;
       }
       await liff.init({ liffId: LIFF_ID });
@@ -383,7 +385,7 @@
     btn.textContent = "送出中…";
 
     try {
-      if (!LIFF_API_URL || LIFF_API_URL === "LIFF_API_URL_PLACEHOLDER") {
+      if (!LIFF_API_URL || LIFF_API_URL === "LIFF_API_URL_PLACEHOLDER" || LIFF_API_URL.startsWith("<?")) {
         // 開發模式：印出 payload 供檢查
         console.log("DEV payload:", payload);
         toast("🧪 開發模式：payload 已印在 Console，未送到後端");

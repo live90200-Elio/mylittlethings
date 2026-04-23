@@ -18,7 +18,9 @@
 const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit";
 // PDF 契約存檔資料夾 ID（Google Drive URL 中 /folders/ 後面那串）
 const PDF_FOLDER_ID = "PDF_FOLDER_ID_PLACEHOLDER";
-// LIFF API 密碼（長度 16+，要跟 index.html 裡 LIFF_KEY 一模一樣）
+// LIFF ID（LINE Developers Console → LIFF app 建好後填；不是秘密）
+const LIFF_ID = "LIFF_ID_PLACEHOLDER";
+// LIFF API 密碼（長度 16+，只存這裡，不進 public repo）
 const LIFF_KEY = "change-me-to-random-long-string";
 // 店家資訊（印在 PDF 上）
 const SHOP_NAME = "洗毛這件小事";
@@ -79,9 +81,20 @@ function doPost(e) {
   }
 }
 
-// ======= GET：簡單健康檢查 =======
+// ======= doGet：客戶打開 LIFF 時回傳 HTML（KEY 伺服器端注入，不走 public repo） =======
 function doGet(e) {
-  return json({ ok: true, service: "pet-grooming-liff", ts: new Date().toISOString() });
+  // 健康檢查：打 ?health=1 回傳 JSON
+  if (e && e.parameter && e.parameter.health) {
+    return json({ ok: true, service: "pet-grooming-liff", ts: new Date().toISOString() });
+  }
+  const template = HtmlService.createTemplateFromFile("index");
+  template.LIFF_ID = LIFF_ID;
+  template.LIFF_KEY = LIFF_KEY;
+  template.LIFF_API_URL = ScriptApp.getService().getUrl();
+  return template.evaluate()
+    .setTitle("寵美資訊 — 洗毛這件小事")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag("viewport", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no");
 }
 
 // ======= 電話正規化（跟預約小幫手同一套邏輯） =======
