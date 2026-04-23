@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>寵美資訊 — 洗毛這件小事</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #f5f1ea;
+    color: #2a2a2a;
+    line-height: 1.55;
+  }
+  .app { max-width: 560px; margin: 0 auto; padding: 16px; min-height: 100vh; }
+
+  header { padding: 8px 4px 20px; }
+  header h1 { font-size: 22px; font-weight: 700; color: #8a5a2b; }
+  header .sub { font-size: 13px; color: #888; margin-top: 4px; }
+
+  .card {
+    background: #fff; border-radius: 14px; padding: 18px;
+    margin-bottom: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .card h2 {
+    font-size: 16px; color: #8a5a2b; margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 1px dashed #e8e0d4;
+  }
+
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #555; }
+  .field label .req { color: #d94949; }
+  .field input[type="text"],
+  .field input[type="tel"],
+  .field textarea {
+    width: 100%; font-size: 16px; padding: 11px 12px;
+    border: 2px solid #e8e0d4; border-radius: 10px;
+    outline: none; background: #fafaf7;
+    font-family: inherit;
+  }
+  .field input:focus, .field textarea:focus { border-color: #d89862; background: #fff; }
+  .field textarea { resize: vertical; min-height: 72px; }
+  .field .hint { font-size: 12px; color: #999; margin-top: 4px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 420px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  @media (max-width: 420px) { .checks { grid-template-columns: repeat(2, 1fr); } }
+  .check-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px; border: 2px solid #e8e0d4; border-radius: 10px;
+    background: #fafaf7; cursor: pointer; font-size: 14px;
+    transition: all .15s;
+  }
+  .check-item input { width: 16px; height: 16px; accent-color: #8a5a2b; }
+  .check-item.on { border-color: #8a5a2b; background: #fff6ea; color: #8a5a2b; font-weight: 600; }
+
+  .notice {
+    background: #fff9ec; border: 1px solid #f5e6c0; border-radius: 10px;
+    padding: 12px; font-size: 13.5px; color: #6a4a1a; line-height: 1.7;
+  }
+  .notice ol, .notice ul { padding-left: 20px; margin-top: 4px; }
+  .notice li { margin-bottom: 4px; }
+  .notice strong { color: #8a5a2b; }
+
+  .agree {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-top: 14px; padding: 12px;
+    background: #fafaf7; border-radius: 10px; cursor: pointer;
+  }
+  .agree input { width: 20px; height: 20px; margin-top: 2px; accent-color: #8a5a2b; flex-shrink: 0; }
+  .agree span { font-size: 14.5px; font-weight: 600; }
+
+  .sig-wrap {
+    border: 2px dashed #c9b99a; border-radius: 10px;
+    background: #fafaf7; position: relative;
+    aspect-ratio: 16 / 9;
+  }
+  .sig-wrap canvas {
+    width: 100%; height: 100%; display: block;
+    border-radius: 10px; touch-action: none;
+  }
+  .sig-wrap .placeholder {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #c2b08a; font-size: 14px; pointer-events: none;
+  }
+  .sig-wrap.has-sig .placeholder { display: none; }
+  .sig-tools { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .sig-clear {
+    background: none; border: 1px solid #c9b99a; color: #8a5a2b;
+    padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+
+  .submit {
+    width: 100%; padding: 16px;
+    background: #8a5a2b; color: #fff; border: 0; border-radius: 12px;
+    font-size: 17px; font-weight: 700; cursor: pointer;
+    margin-top: 8px;
+  }
+  .submit:disabled { background: #c2b08a; cursor: not-allowed; }
+  .submit:active:not(:disabled) { transform: translateY(1px); }
+
+  .env-note {
+    text-align: center; font-size: 12px; color: #aaa; padding: 16px 4px 24px;
+  }
+
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: #2a2a2a; color: #fff; padding: 10px 18px; border-radius: 8px;
+    font-size: 14px; z-index: 100; opacity: 0; transition: opacity .2s;
+    pointer-events: none; max-width: 90%;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { background: #b02020; }
+
+  .success-screen {
+    display: none; text-align: center; padding: 40px 20px;
+  }
+  .success-screen.show { display: block; }
+  .success-screen .icon { font-size: 56px; margin-bottom: 12px; }
+  .success-screen h2 { color: #2a7a2a; margin-bottom: 8px; }
+  .success-screen p { color: #666; margin-bottom: 20px; }
+  .success-screen a.pdf-link {
+    display: inline-block; padding: 12px 20px;
+    background: #8a5a2b; color: #fff; text-decoration: none;
+    border-radius: 10px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div id="form-view">
+    <header>
+      <h1>🛁 寵美資訊登記</h1>
+      <div class="sub">請填寫以下資料，方便我們提供更好的服務</div>
+    </header>
+
+    <!-- 客戶與寵物 -->
+    <div class="card">
+      <h2>👤 客戶與寵物</h2>
+      <div class="field">
+        <label>客戶姓名 <span class="req">*</span></label>
+        <input type="text" id="customerName" placeholder="您的姓名" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label>聯絡電話 <span class="req">*</span></label>
+        <input type="tel" id="customerPhone" placeholder="09XXXXXXXX" autocomplete="tel" required>
+        <div class="hint">請輸入手機號碼（含或不含連字號皆可）</div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>寵物名 <span class="req">*</span></label>
+          <input type="text" id="petName" placeholder="例如：小白" required>
+        </div>
+        <div class="field">
+          <label>品種</label>
+          <input type="text" id="petBreed" placeholder="例如：馬爾濟斯">
+        </div>
+      </div>
+      <div class="field">
+        <label>備註</label>
+        <textarea id="remark" placeholder="寵物習性、健康狀況或其他特別需求"></textarea>
+      </div>
+    </div>
+
+    <!-- 美容項目 -->
+    <div class="card">
+      <h2>✂️ 美容項目（可複選）</h2>
+      <div class="checks" id="services">
+        <label class="check-item"><input type="checkbox" value="洗澡"> 洗澡</label>
+        <label class="check-item"><input type="checkbox" value="大美容"> 大美容</label>
+        <label class="check-item"><input type="checkbox" value="貴賓腳"> 貴賓腳</label>
+        <label class="check-item"><input type="checkbox" value="除蚤"> 除蚤</label>
+        <label class="check-item"><input type="checkbox" value="藥浴"> 藥浴</label>
+        <label class="check-item"><input type="checkbox" value="修頭"> 修頭</label>
+        <label class="check-item"><input type="checkbox" value="基礎美容"> 基礎美容</label>
+      </div>
+      <div class="field" style="margin-top: 14px;">
+        <label>金額（元，可留空待現場確認）</label>
+        <input type="text" id="amount" inputmode="numeric" placeholder="例如：800">
+      </div>
+    </div>
+
+    <!-- 注意事項 -->
+    <div class="card">
+      <h2>⚠️ 注意事項</h2>
+      <div class="notice">
+        <p><strong>※ 如果您的寶貝有以下情況請事先告知：</strong></p>
+        <ol>
+          <li>特殊疾病，如：高傳染性疾病、心臟病、年邁的老犬 或 未超過1個月之幼犬…等</li>
+          <li>剛領養尚未帶去獸醫院檢查的狗狗</li>
+        </ol>
+        <ul style="margin-top: 10px;">
+          <li>美容寵物若於店家打烊前未接回，一律以住宿計費</li>
+          <li>住宿寵物若超過 1 星期未與店家聯絡，本店將報請相關單位依法辦理</li>
+          <li>住宿寵物於美容或住宿期間因<strong>本身體質因素</strong>所造成之疾病，所產生之醫療費將由飼主自行負擔</li>
+          <li>若飼主未告知有<strong>跳蚤、壁蝨或打結、皮膚病</strong>，美容師有權自行處理，所產生之費用由飼主承擔</li>
+          <li>本店將保有寵物體型收費標準之權力</li>
+        </ul>
+      </div>
+
+      <label class="agree">
+        <input type="checkbox" id="agreeCheck">
+        <span>我已閱讀並同意以上所有注意事項</span>
+      </label>
+    </div>
+
+    <!-- 電子簽名 -->
+    <div class="card">
+      <h2>✍️ 顧客簽名</h2>
+      <div class="sig-wrap" id="sigWrap">
+        <canvas id="sigCanvas"></canvas>
+        <div class="placeholder">請在此區域簽名</div>
+      </div>
+      <div class="sig-tools">
+        <button type="button" class="sig-clear" id="sigClear">清除重簽</button>
+      </div>
+    </div>
+
+    <button class="submit" id="submitBtn">送出</button>
+
+    <div class="env-note" id="envNote">載入中…</div>
+  </div>
+
+  <!-- 送出成功畫面 -->
+  <div class="success-screen" id="successView">
+    <div class="icon">✅</div>
+    <h2>已送出</h2>
+    <p>您的資訊與契約已存檔</p>
+    <a href="#" class="pdf-link" id="pdfLink" target="_blank" rel="noopener">📄 查看契約 PDF</a>
+    <p style="margin-top: 24px; font-size: 13px;">
+      <button onclick="location.reload()" style="background:none;border:1px solid #c9b99a;padding:8px 16px;border-radius:8px;color:#8a5a2b;cursor:pointer;">填另一筆</button>
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- LIFF SDK -->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<!-- Signature Pad -->
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@5.0.4/dist/signature_pad.umd.min.js"></script>
+
+<script>
+  // ========== ⚠️ 必改區 ==========
+  const LIFF_ID = "LIFF_ID_PLACEHOLDER";                  // LINE Developers Console → LIFF app 建好後填
+  const LIFF_API_URL = "LIFF_API_URL_PLACEHOLDER";        // Apps Script 部署後的網址（到 /exec）
+  const LIFF_KEY = "change-me-to-random-long-string";     // 跟 Apps Script 裡 Code.gs 的 LIFF_KEY 對上
+  // ================================
+
+  const $ = (id) => document.getElementById(id);
+  const toast = (msg, isErr = false) => {
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.toggle("err", isErr);
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+  };
+
+  // --- 美容項目勾選狀態樣式 ---
+  document.querySelectorAll("#services .check-item").forEach((el) => {
+    const cb = el.querySelector("input");
+    const sync = () => el.classList.toggle("on", cb.checked);
+    cb.addEventListener("change", sync);
+  });
+
+  // --- 簽名 Canvas ---
+  const sigWrap = $("sigWrap");
+  const canvas = $("sigCanvas");
+  let signaturePad;
+
+  function initSignature() {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * ratio;
+    canvas.height = rect.height * ratio;
+    canvas.getContext("2d").scale(ratio, ratio);
+    if (!signaturePad) {
+      signaturePad = new SignaturePad(canvas, {
+        backgroundColor: "rgba(0,0,0,0)",
+        penColor: "#2a2a2a",
+        minWidth: 1.2,
+        maxWidth: 2.8,
+      });
+      signaturePad.addEventListener("beginStroke", () => sigWrap.classList.add("has-sig"));
+    }
+  }
+  window.addEventListener("resize", () => {
+    // 重繪前保存資料
+    const data = signaturePad ? signaturePad.toData() : null;
+    initSignature();
+    if (data) signaturePad.fromData(data);
+  });
+  initSignature();
+
+  $("sigClear").addEventListener("click", () => {
+    signaturePad.clear();
+    sigWrap.classList.remove("has-sig");
+  });
+
+  // --- LIFF 初始化 ---
+  let liffProfile = null;
+  let liffReady = false;
+
+  async function initLiff() {
+    const envNote = $("envNote");
+    try {
+      if (!LIFF_ID || LIFF_ID === "LIFF_ID_PLACEHOLDER") {
+        envNote.textContent = "🧪 開發模式（未設定 LIFF ID，以 Web 表單模式執行）";
+        return;
+      }
+      await liff.init({ liffId: LIFF_ID });
+      liffReady = true;
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+      try {
+        liffProfile = await liff.getProfile();
+        envNote.textContent = `✅ LINE 已登入：${liffProfile.displayName}`;
+        // 如果客戶姓名是空的，用 LINE 顯示名稱預填（但仍可改）
+        if (!$("customerName").value) $("customerName").value = liffProfile.displayName || "";
+      } catch (e) {
+        envNote.textContent = "⚠️ 無法取得 LINE 個人資料（可能需要加好友）";
+      }
+    } catch (e) {
+      envNote.textContent = "⚠️ LIFF 初始化失敗，以 Web 表單模式執行";
+      console.error(e);
+    }
+  }
+  initLiff();
+
+  // --- 送出 ---
+  $("submitBtn").addEventListener("click", submit);
+
+  function validatePhone(raw) {
+    const cleaned = String(raw || "").replace(/[^\d]/g, "");
+    const m = cleaned.match(/09\d{8}/);
+    return m ? m[0] : "";
+  }
+
+  async function submit() {
+    const name = $("customerName").value.trim();
+    const phone = validatePhone($("customerPhone").value);
+    const petName = $("petName").value.trim();
+    const breed = $("petBreed").value.trim();
+    const remark = $("remark").value.trim();
+    const amount = $("amount").value.trim();
+    const services = [...document.querySelectorAll("#services input:checked")].map((c) => c.value);
+    const agreed = $("agreeCheck").checked;
+
+    if (!name) return toast("請填寫客戶姓名", true);
+    if (!phone) return toast("電話格式錯誤（請填 09 開頭 10 碼）", true);
+    if (!petName) return toast("請填寫寵物名", true);
+    if (!agreed) return toast("請閱讀並同意注意事項", true);
+    if (!signaturePad || signaturePad.isEmpty()) return toast("請簽名", true);
+
+    const signatureDataUrl = signaturePad.toDataURL("image/png");
+
+    const payload = {
+      key: LIFF_KEY,
+      liffUserId: liffProfile ? liffProfile.userId : "",
+      liffDisplayName: liffProfile ? liffProfile.displayName : "",
+      name,
+      phone,
+      petName,
+      breed,
+      remark,
+      amount,
+      services,
+      agreedNoticeAt: new Date().toISOString(),
+      signaturePng: signatureDataUrl,
+      userAgent: navigator.userAgent,
+      submittedAt: new Date().toISOString(),
+    };
+
+    const btn = $("submitBtn");
+    btn.disabled = true;
+    btn.textContent = "送出中…";
+
+    try {
+      if (!LIFF_API_URL || LIFF_API_URL === "LIFF_API_URL_PLACEHOLDER") {
+        // 開發模式：印出 payload 供檢查
+        console.log("DEV payload:", payload);
+        toast("🧪 開發模式：payload 已印在 Console，未送到後端");
+        btn.disabled = false;
+        btn.textContent = "送出";
+        return;
+      }
+
+      const res = await fetch(LIFF_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },  // 避開 CORS preflight
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+
+      // 切成功畫面
+      $("form-view").style.display = "none";
+      $("successView").classList.add("show");
+      if (result.pdfUrl) $("pdfLink").href = result.pdfUrl;
+      else $("pdfLink").style.display = "none";
+    } catch (err) {
+      console.error(err);
+      toast("送出失敗：" + (err.message || err), true);
+      btn.disabled = false;
+      btn.textContent = "送出";
+    }
+  }
+</script>
+</body>
+</html>
