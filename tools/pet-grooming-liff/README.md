@@ -12,9 +12,11 @@
 
 | 檔案 | 用途 |
 |------|------|
-| `index.html` | LIFF 前端表單（客戶在 LINE 內打開） |
-| `Code.gs` | Apps Script 後端（寫 Sheets + 產 PDF + 存 Drive） |
+| `index.html` | LIFF 前端表單（由 Apps Script `doGet()` 伺服，用 `<?= ?>` 模板注入 KEY/ID） |
+| `Code.gs` | Apps Script 後端（`doGet` 回傳 HTML + `doPost` 寫 Sheets + 產 PDF + 存 Drive） |
 | `部署指南.md` | 第一次部署的完整步驟 |
+
+> 🏗️ **架構**：HTML + 後端都由 Apps Script 伺服，不走 GitHub Pages。所以密碼類常數只存 Apps Script 線上版，public repo 看不到真值。
 
 ## 🔗 資料流
 
@@ -39,7 +41,7 @@ LIFF 顯示「已送出」+ PDF 連結
 ## 🔐 安全設計
 
 - **KEY 驗證**：前後端共用 `LIFF_KEY`，擋直接打 API 的人
-- **PII 保護**：`LIFF_KEY` 在 public repo 是佔位符，真實密碼只存在 Apps Script 線上版
+- **KEY 不進 public repo**：`Code.gs` 裡 `LIFF_KEY` 在 repo 是佔位符，真實密碼只存 Apps Script 線上版；`index.html` 用 `<?= LIFF_KEY ?>` 模板注入，repo 裡也看不到真值
 - **資料完整性**：每筆契約算 SHA-256 存到 Sheets，日後可驗 Drive PDF 是否被改
 - **LINE userId**：僅供紀錄追溯，不作為身份驗證依據
 
@@ -56,6 +58,7 @@ LIFF 顯示「已送出」+ PDF 連結
 
 ## 🐛 除錯
 
-- **前端問題**：LINE 內打開 → 搖動手機會打開 LIFF Debug；或用電腦瀏覽器開 `index.html` 進「開發模式」（LIFF 失敗 fallback 到純 Web 表單）
+- **前端問題**：LINE 內打開 → 搖動手機會打開 LIFF Debug；或用電腦瀏覽器開 Apps Script `.../exec` 網址進「開發模式」（非 LIFF 環境 fallback 到純 Web 表單，不會真送資料）
 - **後端問題**：Apps Script 編輯器 → 執行 `testDoPost()` → 看「執行記錄」
 - **資料問題**：檢查 Sheets「契約紀錄」有沒有新列；Drive 資料夾有沒有新 PDF
+- **本地預覽注意**：直接用 Live Server 打開 `index.html` 會看到 `<?= LIFF_ID ?>` 原始文字（預期行為，模板要 Apps Script 處理才會渲染）
