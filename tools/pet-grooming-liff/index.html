@@ -246,8 +246,8 @@
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@5.0.4/dist/signature_pad.umd.min.js"></script>
 
 <script>
-  // ========== Apps Script 伺服器端注入（不要手改這三行） ==========
-  // 本檔透過 Apps Script doGet() 回傳，<?= ... ?> 由 server 填值。
+  // ========== Apps Script 伺服器端注入（不要手改下面三行） ==========
+  // 本檔透過 Apps Script doGet() 回傳，下三個常數由 server 端模板填值。
   // 直接瀏覽器打開本檔會看到原始模板語法 → 是預期行為。
   const LIFF_ID = "<?= LIFF_ID ?>";
   const LIFF_API_URL = "<?= LIFF_API_URL ?>";
