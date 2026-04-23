@@ -323,7 +323,7 @@
       }
       try {
         liffProfile = await liff.getProfile();
-        envNote.textContent = `✅ LINE 已登入：${liffProfile.displayName}`;
+        envNote.textContent = "✅ LINE 已登入：" + liffProfile.displayName;
         // 如果客戶姓名是空的，用 LINE 顯示名稱預填（但仍可改）
         if (!$("customerName").value) $("customerName").value = liffProfile.displayName || "";
       } catch (e) {
