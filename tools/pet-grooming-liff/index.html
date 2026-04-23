@@ -247,11 +247,11 @@
 
 <script>
   // ========== Apps Script 伺服器端注入（不要手改下面三行） ==========
-  // 本檔透過 Apps Script doGet() 回傳，下三個常數由 server 端模板填值。
-  // 直接瀏覽器打開本檔會看到原始模板語法 → 是預期行為。
-  const LIFF_ID = "<?= LIFF_ID ?>";
-  const LIFF_API_URL = "<?= LIFF_API_URL ?>";
-  const LIFF_KEY = "<?= LIFF_KEY ?>";
+  // 本檔透過 Apps Script doGet() 回傳，下三個 __XXX__ 佔位符會被 server 字串取代。
+  // 直接瀏覽器打開本檔會看到 __XXX__ 原字樣 → 是預期行為。
+  const LIFF_ID = "__LIFF_ID__";
+  const LIFF_API_URL = "__LIFF_API_URL__";
+  const LIFF_KEY = "__LIFF_KEY__";
   // =================================================================
 
   const $ = (id) => document.getElementById(id);
@@ -311,7 +311,7 @@
   async function initLiff() {
     const envNote = $("envNote");
     try {
-      if (!LIFF_ID || LIFF_ID === "LIFF_ID_PLACEHOLDER" || LIFF_ID.startsWith("<?")) {
+      if (!LIFF_ID || LIFF_ID === "LIFF_ID_PLACEHOLDER" || LIFF_ID === "__LIFF_ID__") {
         envNote.textContent = "🧪 開發模式（未透過 Apps Script 載入，以 Web 表單模式執行）";
         return;
       }
@@ -385,7 +385,7 @@
     btn.textContent = "送出中…";
 
     try {
-      if (!LIFF_API_URL || LIFF_API_URL === "LIFF_API_URL_PLACEHOLDER" || LIFF_API_URL.startsWith("<?")) {
+      if (!LIFF_API_URL || LIFF_API_URL === "LIFF_API_URL_PLACEHOLDER" || LIFF_API_URL === "__LIFF_API_URL__") {
         // 開發模式：印出 payload 供檢查
         console.log("DEV payload:", payload);
         toast("🧪 開發模式：payload 已印在 Console，未送到後端");

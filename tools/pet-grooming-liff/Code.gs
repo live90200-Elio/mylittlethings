@@ -82,16 +82,20 @@ function doPost(e) {
 }
 
 // ======= doGet：客戶打開 LIFF 時回傳 HTML（KEY 伺服器端注入，不走 public repo） =======
+// 直接讀 HTML 原始內容 + 字串取代注入值。不用 HtmlService 模板引擎，避開其編譯 bug。
 function doGet(e) {
   // 健康檢查：打 ?health=1 回傳 JSON
   if (e && e.parameter && e.parameter.health) {
     return json({ ok: true, service: "pet-grooming-liff", ts: new Date().toISOString() });
   }
-  const template = HtmlService.createTemplateFromFile("index");
-  template.LIFF_ID = LIFF_ID;
-  template.LIFF_KEY = LIFF_KEY;
-  template.LIFF_API_URL = ScriptApp.getService().getUrl();
-  return template.evaluate()
+  const rawHtml = HtmlService.createHtmlOutputFromFile("index").getContent();
+  const apiUrl = ScriptApp.getService().getUrl();
+  // 用 replacer function 避免 $& / $' 等替換字元特殊語意
+  const html = rawHtml
+    .replace(/__LIFF_ID__/g, () => LIFF_ID)
+    .replace(/__LIFF_KEY__/g, () => LIFF_KEY)
+    .replace(/__LIFF_API_URL__/g, () => apiUrl);
+  return HtmlService.createHtmlOutput(html)
     .setTitle("寵美資訊 — 洗毛這件小事")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag("viewport", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no");
