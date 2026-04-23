@@ -140,6 +140,12 @@ function parseEvent(ev, customerMap) {
 }
 
 function extractPhone(text) {
+  return normalizePhone(text);
+}
+
+// 把任何格式的電話（0905-435-751、0905 435 751、+886905435751、0905435751）
+// 統一轉成 10 碼 09XXXXXXXX；抓不到就回空字串
+function normalizePhone(text) {
   const cleaned = String(text || "").replace(/[^\d]/g, "");
   const m = cleaned.match(/09\d{8}/);
   return m ? m[0] : "";
@@ -185,7 +191,7 @@ function buildCustomerMap() {
   const values = sheet.getDataRange().getValues();
   const map = {};
   for (let i = 1; i < values.length; i++) {
-    const phone = String(values[i][0] || "").trim();
+    const phone = normalizePhone(values[i][0]);
     const name = String(values[i][1] || "").trim();
     if (phone) map[phone] = name;
   }
