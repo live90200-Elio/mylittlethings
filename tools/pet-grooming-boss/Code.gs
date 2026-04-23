@@ -20,7 +20,7 @@
  */
 
 // ========== ⚠️ 必改區 ==========
-const FILE_A_URL = "https://docs.google.com/spreadsheets/d/YOUR_FILE_A_ID/edit"; // ← 檔案 A 網址
+const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit"; // ← 檔案 A 網址
 const BOSS_KEY = "change-me-to-random-long-string"; // ← 老闆自訂的密碼（長亂碼）
 // ================================
 
