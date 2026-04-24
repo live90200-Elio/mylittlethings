@@ -12,23 +12,23 @@
 
 | 檔案 | 用途 |
 |------|------|
-| `index.html` | LIFF 前端表單（由 Apps Script `doGet()` 伺服，用 `<?= ?>` 模板注入 KEY/ID） |
-| `Code.gs` | Apps Script 後端（`doGet` 回傳 HTML + `doPost` 寫 Sheets + 產 PDF + 存 Drive） |
+| `index.html` | LIFF 前端表單（靜態 HTML，LIFF_ID + API URL 直接寫死在檔案裡） |
+| `Code.gs` | Apps Script 後端（只當 API：`doPost` 寫 Sheets + 產 PDF + 存 Drive） |
 | `部署指南.md` | 第一次部署的完整步驟 |
 
-> 🏗️ **架構**：HTML + 後端都由 Apps Script 伺服，不走 GitHub Pages。所以密碼類常數只存 Apps Script 線上版，public repo 看不到真值。
+> 🏗️ **架構**：前端 `index.html` 靜態檔（可放 GitHub Pages 或任何靜態主機），後端 Apps Script 只處理 POST API。完全沒有共用密碼 KEY，也不用模板注入。
 
 ## 🔗 資料流
 
 ```
 客戶 LINE 點 Rich Menu「寵美資訊」
   ↓
-LIFF 自動帶入客戶 LINE userId + displayName
+LIFF 載入 index.html → 初始化 LINE SDK 取得 userId + displayName
   ↓
 客戶填表 + Canvas 簽名 + 勾選同意注意事項
   ↓ POST（text/plain 避開 CORS）
-Apps Script Code.gs:
-  ① 驗證 KEY + 必填
+Apps Script Code.gs doPost:
+  ① 驗證必填（含 liffUserId，沒登入 LINE 送不進來）
   ② 算 SHA-256 哈希（防竄改）
   ③ Upsert「客戶資料」工作表（電話 key）
   ④ 產 PDF（HTML → PDF）存 Drive 指定資料夾
@@ -40,15 +40,16 @@ LIFF 顯示「已送出」+ PDF 連結
 
 ## 🔐 安全設計
 
-- **KEY 驗證**：前後端共用 `LIFF_KEY`，擋直接打 API 的人
-- **KEY 不進 public repo**：`Code.gs` 裡 `LIFF_KEY` 在 repo 是佔位符，真實密碼只存 Apps Script 線上版；`index.html` 用 `<?= LIFF_KEY ?>` 模板注入，repo 裡也看不到真值
-- **資料完整性**：每筆契約算 SHA-256 存到 Sheets，日後可驗 Drive PDF 是否被改
-- **LINE userId**：僅供紀錄追溯，不作為身份驗證依據
+- **必填 `liffUserId`**：前端取自 `liff.getProfile()`，只有真的在 LINE 內開啟過 LIFF 的使用者才拿得到。直接打 API 沒帶 userId 會被擋。
+- **`LIFF_ID` 本來就是公開資訊**：在 LINE Developers Console 就能查到，不是機密。
+- **Apps Script `/exec` URL 可公開**：Web App 寫死「所有人」可打，但 API 內容只回 JSON 狀態，拿到 URL 也打不壞什麼。
+- **資料完整性**：每筆契約算 SHA-256 存到 Sheets，日後可驗 Drive PDF 是否被改。
+- **LINE userId**：僅供紀錄追溯，不作為身份驗證依據。
 
 ## ⚠️ V1 限制（已知）
 
 - **沒有美容師簽名** — 契約 PDF 只有客戶簽名，美容師簽名欄留白（現場補紙本或 V2 補做）
-- **沒有 LINE Access Token 後端驗證** — 僅用 KEY，V2 考慮加 `liff.getAccessToken()` + 後端驗 token
+- **沒有 LINE Access Token 後端驗證** — 只靠前端帶 `liffUserId`，不擋惡意偽造。V2 可加 `liff.getAccessToken()` + 後端驗 token
 - **PDF 字型依賴 Apps Script 內建** — 中文若出問題需調整 font-family
 - **不支援修改已送出的契約** — 一律 append-only，改需重新送一筆（哈希會變）
 
@@ -58,7 +59,7 @@ LIFF 顯示「已送出」+ PDF 連結
 
 ## 🐛 除錯
 
-- **前端問題**：LINE 內打開 → 搖動手機會打開 LIFF Debug；或用電腦瀏覽器開 Apps Script `.../exec` 網址進「開發模式」（非 LIFF 環境 fallback 到純 Web 表單，不會真送資料）
+- **前端問題**：LINE 內打開 → 搖動手機會打開 LIFF Debug；或用電腦瀏覽器直接開 `index.html`（非 LIFF 環境，`liff.init` 會報錯但表單 UI 可以看）
 - **後端問題**：Apps Script 編輯器 → 執行 `testDoPost()` → 看「執行記錄」
 - **資料問題**：檢查 Sheets「契約紀錄」有沒有新列；Drive 資料夾有沒有新 PDF
-- **本地預覽注意**：直接用 Live Server 打開 `index.html` 會看到 `<?= LIFF_ID ?>` 原始文字（預期行為，模板要 Apps Script 處理才會渲染）
+- **健康檢查**：瀏覽器打 `<你的 /exec 網址>?health=1` → 看到 `{"ok":true,...}` 代表後端活著
