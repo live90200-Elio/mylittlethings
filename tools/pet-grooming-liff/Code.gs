@@ -17,7 +17,7 @@
 // 檔案 A 網址（寫入客戶資料 + 契約紀錄）
 const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit";
 // PDF 契約存檔資料夾 ID（Google Drive URL 中 /folders/ 後面那串）
-const PDF_FOLDER_ID = "PDF_FOLDER_ID_PLACEHOLDER";
+const PDF_FOLDER_ID = "1ECKKS3qsMwK1Vu-lmZ0PnMAcQW7nRSZx";
 // 店家資訊（印在 PDF 上）
 const SHOP_NAME = "洗毛這件小事";
 const SHOP_ADDRESS = "新竹市香山區中華路五段46號2樓";
