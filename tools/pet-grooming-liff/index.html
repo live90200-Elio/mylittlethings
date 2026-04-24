@@ -246,13 +246,12 @@
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@5.0.4/dist/signature_pad.umd.min.js"></script>
 
 <script>
-  // ========== Apps Script 伺服器端注入（不要手改下面三行） ==========
-  // 本檔透過 Apps Script doGet() 回傳，下三個 __XXX__ 佔位符會被 server 字串取代。
-  // 直接瀏覽器打開本檔會看到 __XXX__ 原字樣 → 是預期行為。
-  const LIFF_ID = "__LIFF_ID__";
-  const LIFF_API_URL = "__LIFF_API_URL__";
-  const LIFF_KEY = "__LIFF_KEY__";
-  // =================================================================
+  // ========== 設定（這三個都是 public，不是機密） ==========
+  // LIFF_ID：LINE Developers Console 查得到，本來就是公開 ID
+  // LIFF_API_URL：Apps Script Web App /exec 網址
+  const LIFF_ID = "2009881783-3IqVJdS9";
+  const LIFF_API_URL = "https://script.google.com/macros/s/AKfycbx99cUYpq2gC5KjndYNQr_c9OWUrBvkREQo9YKT9J0a9NWgA6TMhOfC-c_KcA6Ya13j/exec";
+  // ==========================================================
 
   const $ = (id) => document.getElementById(id);
   const toast = (msg, isErr = false) => {
@@ -311,10 +310,6 @@
   async function initLiff() {
     const envNote = $("envNote");
     try {
-      if (!LIFF_ID || LIFF_ID === "LIFF_ID_PLACEHOLDER" || LIFF_ID === "__LIFF_ID__") {
-        envNote.textContent = "🧪 開發模式（未透過 Apps Script 載入，以 Web 表單模式執行）";
-        return;
-      }
       await liff.init({ liffId: LIFF_ID });
       liffReady = true;
       if (!liff.isLoggedIn()) {
@@ -324,13 +319,12 @@
       try {
         liffProfile = await liff.getProfile();
         envNote.textContent = "✅ LINE 已登入：" + liffProfile.displayName;
-        // 如果客戶姓名是空的，用 LINE 顯示名稱預填（但仍可改）
         if (!$("customerName").value) $("customerName").value = liffProfile.displayName || "";
       } catch (e) {
         envNote.textContent = "⚠️ 無法取得 LINE 個人資料（可能需要加好友）";
       }
     } catch (e) {
-      envNote.textContent = "⚠️ LIFF 初始化失敗，以 Web 表單模式執行";
+      envNote.textContent = "⚠️ LIFF 初始化失敗：" + (e.message || e);
       console.error(e);
     }
   }
@@ -364,7 +358,6 @@
     const signatureDataUrl = signaturePad.toDataURL("image/png");
 
     const payload = {
-      key: LIFF_KEY,
       liffUserId: liffProfile ? liffProfile.userId : "",
       liffDisplayName: liffProfile ? liffProfile.displayName : "",
       name,
@@ -385,15 +378,6 @@
     btn.textContent = "送出中…";
 
     try {
-      if (!LIFF_API_URL || LIFF_API_URL === "LIFF_API_URL_PLACEHOLDER" || LIFF_API_URL === "__LIFF_API_URL__") {
-        // 開發模式：印出 payload 供檢查
-        console.log("DEV payload:", payload);
-        toast("🧪 開發模式：payload 已印在 Console，未送到後端");
-        btn.disabled = false;
-        btn.textContent = "送出";
-        return;
-      }
-
       const res = await fetch(LIFF_API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },  // 避開 CORS preflight

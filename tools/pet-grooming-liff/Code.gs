@@ -3,7 +3,7 @@
  *
  * 流程：
  *   1. doPost 接收 LIFF 前端送來的 JSON（客戶資料、簽名 Base64 PNG、時間戳、LINE userId）
- *   2. 驗證 KEY + 必填欄位
+ *   2. 驗證必填欄位（含 liffUserId，沒登入 LINE 的人送不進來）
  *   3. 算 payload 的 SHA-256 哈希（防竄改）
  *   4. Upsert「客戶資料」工作表（電話為 key，存在就更新、不存在就新增）
  *   5. 產 PDF 契約（HTML template → PDF blob）→ 存 Drive 指定資料夾
@@ -18,10 +18,6 @@
 const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit";
 // PDF 契約存檔資料夾 ID（Google Drive URL 中 /folders/ 後面那串）
 const PDF_FOLDER_ID = "PDF_FOLDER_ID_PLACEHOLDER";
-// LIFF ID（LINE Developers Console → LIFF app 建好後填；不是秘密）
-const LIFF_ID = "LIFF_ID_PLACEHOLDER";
-// LIFF API 密碼（長度 16+，只存這裡，不進 public repo）
-const LIFF_KEY = "change-me-to-random-long-string";
 // 店家資訊（印在 PDF 上）
 const SHOP_NAME = "洗毛這件小事";
 const SHOP_ADDRESS = "新竹市香山區中華路五段46號2樓";
@@ -39,12 +35,8 @@ function doPost(e) {
     if (!raw) return json({ error: "no_body" });
     const data = JSON.parse(raw);
 
-    if (!data.key || data.key !== LIFF_KEY) {
-      return json({ error: "auth_failed", message: "密碼錯誤或未提供" });
-    }
-
     // --- 必填驗證 ---
-    const required = ["name", "phone", "petName", "signaturePng"];
+    const required = ["name", "phone", "petName", "signaturePng", "liffUserId"];
     for (const f of required) {
       if (!data[f]) return json({ error: `missing_${f}`, message: `缺少必填：${f}` });
     }
@@ -81,24 +73,12 @@ function doPost(e) {
   }
 }
 
-// ======= doGet：客戶打開 LIFF 時回傳 HTML（KEY 伺服器端注入，不走 public repo） =======
-// 直接讀 HTML 原始內容 + 字串取代注入值。不用 HtmlService 模板引擎，避開其編譯 bug。
+// ======= doGet：健康檢查用（HTML 改由 GitHub Pages 伺服，不走 Apps Script） =======
 function doGet(e) {
-  // 健康檢查：打 ?health=1 回傳 JSON
   if (e && e.parameter && e.parameter.health) {
     return json({ ok: true, service: "pet-grooming-liff", ts: new Date().toISOString() });
   }
-  const rawHtml = HtmlService.createHtmlOutputFromFile("index").getContent();
-  const apiUrl = ScriptApp.getService().getUrl();
-  // 用 replacer function 避免 $& / $' 等替換字元特殊語意
-  const html = rawHtml
-    .replace(/__LIFF_ID__/g, () => LIFF_ID)
-    .replace(/__LIFF_KEY__/g, () => LIFF_KEY)
-    .replace(/__LIFF_API_URL__/g, () => apiUrl);
-  return HtmlService.createHtmlOutput(html)
-    .setTitle("寵美資訊 — 洗毛這件小事")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag("viewport", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no");
+  return json({ ok: true, service: "pet-grooming-liff", note: "API only; HTML served by GitHub Pages" });
 }
 
 // ======= 電話正規化（跟預約小幫手同一套邏輯） =======
@@ -323,7 +303,6 @@ function formatDateForFilename(d) {
 function testDoPost() {
   const sigPngTiny = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
   const fakeBody = JSON.stringify({
-    key: LIFF_KEY,
     name: "測試客戶",
     phone: "0912345678",
     petName: "測試寵物",
