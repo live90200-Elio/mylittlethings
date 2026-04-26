@@ -19,6 +19,8 @@
 - **寵美管理：老闆私藏儀表板**（`tools/pet-grooming-boss/`）— BOSS_KEY 密碼登入，KPI + 月對月成長 + CSV 匯出 + PWA
 - **預約小幫手**（`tools/appointment-helper/`）— 抓 Google 日曆明日預約，產員工清單 + 客戶提醒草稿，一鍵複製
 - **寵美客戶 LIFF 表單**（`tools/pet-grooming-liff/`）— 客戶在 LINE 內自助登記寵美資訊 + 電子簽名，產 PDF 契約存 Drive，資料自動寫入客戶資料表
+- **寵美自動化維運**（`tools/pet-grooming-ops/`）— Apps Script Trigger 跑每日營收報表（Email + LINE 摘要）+ 健康監控（多 URL 各自 2 小時冷卻）+ setupGuideSheet 自動建檔案 A 「使用教學」分頁
+- **使用教學主檔**（`tools/使用教學.md`）— 客戶/老闆/員工/維護工程師 四對象一站式說明，與 setupGuideSheet 內容同步
 
 ## 工作注意事項
 - 學生資料一律去識別化（只用座號 + 班級代號）
