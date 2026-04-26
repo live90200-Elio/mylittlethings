@@ -67,6 +67,13 @@ function doPost(e) {
     // --- 寫契約紀錄 ---
     appendContractRecord(phone, data, pdfUrl, hash);
 
+    // --- 通知老闆（推 LINE + 寫簽約通知 log，失敗不影響主流程） ---
+    try {
+      notifyBossNewContract(data, phone, pdfUrl);
+    } catch (notifyErr) {
+      Logger.log("[notifyBoss] " + String(notifyErr));
+    }
+
     return json({ ok: true, pdfUrl: pdfUrl, hash: hash });
   } catch (err) {
     return json({ error: String((err && err.message) || err) });
@@ -116,9 +123,9 @@ function upsertCustomer(phone, data, hashPayload) {
   const fieldMap = {
     "電話": phone,
     "姓名": data.name,
-    "寵物名": data.petName,
-    "品種": data.breed || "",
-    "備註": data.remark || "",
+    "寵物1名": data.petName,
+    "寵物1品種": data.breed || "",
+    "美容備註": data.remark || "",
     "建立時間": new Date(),
     "來源": "LIFF",
     "本次服務": servicesStr,
@@ -131,10 +138,10 @@ function upsertCustomer(phone, data, hashPayload) {
     const newRow = headers.map((h) => (h in fieldMap ? fieldMap[h] : ""));
     sheet.appendRow(newRow);
   } else {
-    // 更新：只寫有 header 對應到的欄位；姓名/寵物名/品種 只在原格空白時寫
+    // 更新：只寫有 header 對應到的欄位；姓名/寵物1名/寵物1品種/美容備註 只在原格空白時寫（不蓋老闆手填）
     const range = sheet.getRange(rowIndex, 1, 1, headers.length);
     const current = range.getValues()[0];
-    const softFields = new Set(["姓名", "寵物名", "品種", "備註"]);
+    const softFields = new Set(["姓名", "寵物1名", "寵物1品種", "美容備註"]);
     headers.forEach((h, i) => {
       if (!(h in fieldMap)) return;
       if (softFields.has(h) && current[i]) return; // 軟欄位：原本有值就不蓋
@@ -297,6 +304,91 @@ function formatDateForFilename(d) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${y}${m}${dd}_${hh}${mm}`;
+}
+
+// ============================================================
+// 流程 2：簽約完成 → 推 LINE 通知老闆 + 寫「簽約通知 log」分頁
+// 由 doPost 末段 try{ notifyBossNewContract(...) } 呼叫
+// 失敗不影響主流程（doPost 已回 ok）
+// ============================================================
+const SHEET_NOTIFY_LOG = "簽約通知 log";
+
+function notifyBossNewContract(data, phone, pdfUrl) {
+  const tsStr = new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+  const services = (data.services || []).join("/");
+  const text =
+    "✅ 新簽約完成\n" +
+    "客戶：" + data.name + "\n" +
+    "寵物：" + data.petName + "\n" +
+    "服務：" + (services || "（未選）") + "\n" +
+    "金額：NT$" + (data.amount || "（現場確認）") + "\n" +
+    "合約：" + pdfUrl + "\n" +
+    "時間：" + tsStr;
+
+  let status = "ok";
+  let errorMsg = "";
+  try {
+    if (!pushLine(text)) {
+      status = "error";
+      errorMsg = "pushLine returned false (見 Apps Script 執行記錄)";
+    }
+  } catch (e) {
+    status = "error";
+    errorMsg = String((e && e.message) || e);
+  }
+
+  // 寫 log（不論推播成功失敗都寫一筆，方便事後排查）
+  try {
+    const file = SpreadsheetApp.openByUrl(FILE_A_URL);
+    const sheet = file.getSheetByName(SHEET_NOTIFY_LOG);
+    if (sheet) {
+      sheet.appendRow([
+        new Date(),                  // A notify_at
+        data.name || "",             // B customerName
+        data.petName || "",          // C petName
+        data.amount || "",           // D amount
+        pdfUrl || "",                // E pdfUrl
+        data.liffUserId || "",       // F lineUserId
+        status,                      // G status
+        errorMsg,                    // H errorMsg
+      ]);
+    } else {
+      Logger.log("[notifyBoss] 找不到分頁：" + SHEET_NOTIFY_LOG);
+    }
+  } catch (logErr) {
+    Logger.log("[notifyBoss] 寫 log 失敗：" + String(logErr));
+  }
+}
+
+// ============ LINE 推播共用函式（從 ScriptProperties 讀 token） ============
+function pushLine(text) {
+  const props = PropertiesService.getScriptProperties();
+  const TOKEN = props.getProperty("LINE_TOKEN");
+  const TO = props.getProperty("BOSS_USER_ID");
+  if (!TOKEN || !TO) {
+    Logger.log("[pushLine] LINE_TOKEN 或 BOSS_USER_ID 未設定");
+    return false;
+  }
+  const res = UrlFetchApp.fetch("https://api.line.me/v2/bot/message/push", {
+    method: "post",
+    contentType: "application/json",
+    headers: { "Authorization": "Bearer " + TOKEN },
+    payload: JSON.stringify({
+      to: TO,
+      messages: [{ type: "text", text: String(text).substring(0, 4900) }],
+    }),
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  if (code !== 200) {
+    Logger.log("[pushLine] HTTP " + code + " body=" + res.getContentText().substring(0, 300));
+    return false;
+  }
+  return true;
+}
+
+function testPushLine() {
+  Logger.log("ok=" + pushLine("🧪 [LIFF] 測試 " + new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })));
 }
 
 // ======= 測試用（在 Apps Script 編輯器執行） =======
