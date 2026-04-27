@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>儲值選單 — 洗毛這件小事</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #fdf6f0;
+    color: #2a2a2a;
+    line-height: 1.55;
+  }
+  .app { max-width: 560px; margin: 0 auto; padding: 16px; min-height: 100vh; }
+
+  header { padding: 8px 4px 16px; }
+  header h1 { font-size: 22px; font-weight: 700; color: #8a5a2b; }
+  header .sub { font-size: 13px; color: #888; margin-top: 4px; }
+
+  /* === 餘額卡 === */
+  .balance-card {
+    background: linear-gradient(135deg, #fff6ea 0%, #fde8d4 100%);
+    border-radius: 18px;
+    padding: 20px 22px;
+    margin-bottom: 18px;
+    box-shadow: 0 4px 12px rgba(212, 152, 98, .15);
+    position: relative;
+    overflow: hidden;
+  }
+  .balance-card::after {
+    content: "🐾"; position: absolute; right: 12px; bottom: 8px;
+    font-size: 56px; opacity: .15;
+  }
+  .balance-card .label { font-size: 13px; color: #a07a4a; font-weight: 600; }
+  .balance-card .amount {
+    font-size: 44px; font-weight: 800; color: #8a5a2b;
+    margin-top: 4px; letter-spacing: -1px;
+  }
+  .balance-card .amount .currency { font-size: 22px; vertical-align: 6px; margin-right: 4px; }
+  .balance-card .meta { font-size: 12.5px; color: #a07a4a; margin-top: 8px; }
+  .balance-card.empty .amount { color: #c2b08a; font-size: 28px; }
+  .balance-card.error { background: linear-gradient(135deg, #fff 0%, #ffe8e8 100%); }
+  .balance-card.error .label { color: #b02020; }
+  .balance-card.error .amount { font-size: 16px; color: #b02020; line-height: 1.5; }
+
+  /* === 區塊標題 === */
+  .section-title {
+    font-size: 16px; font-weight: 700; color: #8a5a2b;
+    margin: 22px 4px 10px; display: flex; align-items: center; gap: 6px;
+  }
+
+  /* === 方案卡（仿照圖片風格） === */
+  .plans { display: flex; flex-direction: column; gap: 14px; }
+  .plan-card {
+    border-radius: 18px;
+    padding: 16px 18px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .07);
+    position: relative;
+    border: 2px dashed transparent;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .plan-card.tier-1 { background: linear-gradient(135deg, #e8f4fd 0%, #fde8ec 100%); border-color: #b8d8f0; }
+  .plan-card.tier-2 { background: linear-gradient(135deg, #f0e8fd 0%, #fde8f4 100%); border-color: #d8b8f0; }
+  .plan-card.tier-3 { background: linear-gradient(135deg, #fff4e0 0%, #fde8d4 100%); border-color: #f0c890; }
+  .plan-card .pay-row {
+    display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;
+  }
+  .plan-card .pay-amount {
+    font-size: 38px; font-weight: 800; color: #4a8ac8; letter-spacing: -1px;
+  }
+  .plan-card.tier-2 .pay-amount { color: #8a5ad0; }
+  .plan-card.tier-3 .pay-amount { color: #c89030; }
+  .plan-card .pay-unit { font-size: 14px; color: #888; }
+  .plan-card .bonus-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px;
+  }
+  .plan-card .bonus-tag {
+    background: #fff0f4; color: #d04860;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 16px; font-weight: 700;
+  }
+  .plan-card .valid-tag {
+    background: #fff5e0; color: #b07820;
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 12.5px; font-weight: 600;
+  }
+  .plan-card .total-line {
+    margin-top: 10px; font-size: 13px; color: #666;
+    padding-top: 8px; border-top: 1px dashed #ddd;
+  }
+  .plan-card .total-line strong { color: #8a5a2b; font-size: 15px; }
+  .plan-card .topup-btn {
+    width: 100%; margin-top: 12px;
+    padding: 12px; border: 0; border-radius: 10px;
+    background: #8a5a2b; color: #fff;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .plan-card .topup-btn:active { transform: translateY(1px); }
+  .plan-card .topup-btn:disabled { background: #c2b08a; cursor: not-allowed; }
+
+  /* === 注意事項（照圖片文字） === */
+  .notice-box {
+    background: #fff; border: 1px solid #f0e0d0; border-radius: 12px;
+    padding: 12px 14px; font-size: 12.5px; color: #555; line-height: 1.75;
+    margin-top: 4px;
+  }
+  .notice-box li { margin-left: 16px; margin-bottom: 2px; }
+  .notice-box strong { color: #8a5a2b; }
+
+  /* === 最近交易表 === */
+  .recent-table {
+    background: #fff; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .05);
+  }
+  .recent-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .recent-table th {
+    background: #f5ebde; color: #8a5a2b; padding: 10px 8px;
+    text-align: left; font-weight: 600; font-size: 12.5px;
+  }
+  .recent-table td {
+    padding: 10px 8px; border-top: 1px solid #f5ebde; vertical-align: top;
+  }
+  .recent-table .topup-row { background: #f0fbf2; }
+  .recent-table .topup-row td { color: #2a7a2a; font-weight: 600; }
+  .recent-table .balance-col { text-align: right; font-weight: 600; color: #8a5a2b; white-space: nowrap; }
+  .recent-table .empty-state {
+    padding: 24px 12px; text-align: center; color: #999; font-size: 13px;
+  }
+
+  /* === 不存在客戶的引導 === */
+  .register-hint {
+    background: #fff; border-radius: 14px; padding: 24px;
+    text-align: center; margin-bottom: 18px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .05);
+  }
+  .register-hint .icon { font-size: 48px; margin-bottom: 12px; }
+  .register-hint h3 { color: #8a5a2b; margin-bottom: 8px; }
+  .register-hint p { color: #666; font-size: 14px; line-height: 1.7; }
+
+  .env-note { text-align: center; font-size: 12px; color: #aaa; padding: 16px 4px 24px; }
+
+  /* === Toast === */
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: #2a2a2a; color: #fff; padding: 10px 18px; border-radius: 8px;
+    font-size: 14px; z-index: 100; opacity: 0; transition: opacity .2s;
+    pointer-events: none; max-width: 90%;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { background: #b02020; }
+
+  /* === Modal === */
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .45);
+    display: none; align-items: center; justify-content: center; z-index: 200;
+    padding: 20px;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 16px; padding: 22px;
+    max-width: 380px; width: 100%;
+  }
+  .modal h3 { color: #8a5a2b; margin-bottom: 12px; }
+  .modal .row { font-size: 14.5px; color: #444; margin-bottom: 6px; }
+  .modal .row strong { color: #8a5a2b; }
+  .modal .actions { display: flex; gap: 10px; margin-top: 18px; }
+  .modal .actions button {
+    flex: 1; padding: 12px; border: 0; border-radius: 10px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .modal .actions .cancel { background: #eee; color: #666; }
+  .modal .actions .confirm { background: #8a5a2b; color: #fff; }
+
+  .skeleton {
+    background: linear-gradient(90deg, #f0e8d8 0%, #f8f0e0 50%, #f0e8d8 100%);
+    background-size: 200% 100%; animation: shimmer 1.4s infinite;
+    border-radius: 8px; min-height: 16px;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1>💰 我的儲值卡</h1>
+    <div class="sub" id="subHeader">載入中…</div>
+  </header>
+
+  <!-- 餘額卡 -->
+  <div id="balanceCard" class="balance-card">
+    <div class="label">目前餘額</div>
+    <div class="amount"><div class="skeleton" style="width:60%; height:36px;"></div></div>
+    <div class="meta"><div class="skeleton" style="width:40%; height:14px; margin-top:4px;"></div></div>
+  </div>
+
+  <!-- 引導註冊（只在客戶沒登記過顯示） -->
+  <div id="registerHint" class="register-hint" style="display:none;">
+    <div class="icon">📝</div>
+    <h3>還沒登記客戶資料</h3>
+    <p>請先填寫「寵美資訊登記」表單，<br>之後才能查詢您的儲值餘額。</p>
+  </div>
+
+  <!-- 方案 -->
+  <div class="section-title">✨ 儲值優惠方案</div>
+  <div class="plans" id="plansArea">
+    <div class="plan-card tier-1">
+      <div class="skeleton" style="height:24px; width:80%;"></div>
+      <div class="skeleton" style="height:14px; width:50%; margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- 注意事項 -->
+  <div class="section-title">📌 儲值注意事項</div>
+  <div class="notice-box">
+    <ul>
+      <li>儲值金額不限時間使用</li>
+      <li>贈送部分限<strong>第二次起</strong>，<strong>45 天內</strong>使用</li>
+      <li>儲值<strong>不限貓狗</strong>，可共用</li>
+      <li>儲值無法退費，僅限美容服務，請謹慎思考</li>
+      <li>本店擁有修改活動辦法之權利</li>
+    </ul>
+  </div>
+
+  <!-- 最近交易 -->
+  <div class="section-title">📋 最近 5 筆紀錄</div>
+  <div class="recent-table" id="recentTable">
+    <div class="empty-state">載入中…</div>
+  </div>
+
+  <div class="env-note" id="envNote">載入中…</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 確認 modal -->
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <h3>確認申請儲值？</h3>
+    <div class="row">方案：<strong id="mPlan"></strong></div>
+    <div class="row">付款金額：<strong>NT$<span id="mPay"></span></strong></div>
+    <div class="row">贈送金額：<strong>NT$<span id="mBonus"></span></strong></div>
+    <div class="row">總計可用：<strong>NT$<span id="mTotal"></span></strong></div>
+    <p style="font-size:12.5px; color:#888; margin-top:10px;">
+      送出後我們會通知店家，由店家聯絡您確認付款方式。
+    </p>
+    <div class="actions">
+      <button class="cancel" id="mCancel">取消</button>
+      <button class="confirm" id="mConfirm">確定申請</button>
+    </div>
+  </div>
+</div>
+
+<!-- LIFF SDK -->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<script>
+  // ========== 設定（這兩個都是 public，不是機密） ==========
+  const LIFF_ID = "LIFF_ID_PLACEHOLDER";
+  const LIFF_API_URL = "LIFF_API_URL_PLACEHOLDER";
+  // ==========================================================
+
+  const $ = (id) => document.getElementById(id);
+  const toast = (msg, isErr = false) => {
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.toggle("err", isErr);
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2800);
+  };
+
+  let liffProfile = null;
+  let plans = [];
+  let registered = false;
+
+  // === 初始化流程 ===
+  (async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      try {
+        liffProfile = await liff.getProfile();
+        $("envNote").textContent = "✅ LINE 已登入：" + liffProfile.displayName;
+        $("subHeader").textContent = "您好，" + liffProfile.displayName;
+      } catch (e) {
+        $("envNote").textContent = "⚠️ 無法取得 LINE 個人資料";
+      }
+      // 平行載入：方案 + 我的餘額
+      await Promise.all([loadPlans(), loadMyCredit()]);
+    } catch (e) {
+      $("envNote").textContent = "⚠️ LIFF 初始化失敗：" + (e.message || e);
+      console.error(e);
+    }
+  })();
+
+  // === 載入方案 ===
+  async function loadPlans() {
+    try {
+      const res = await fetch(LIFF_API_URL + "?action=getPlans");
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      plans = data.plans || [];
+      renderPlans();
+    } catch (e) {
+      $("plansArea").innerHTML = '<div style="color:#b02020;padding:12px;font-size:13px;">方案載入失敗：' + (e.message || e) + '</div>';
+    }
+  }
+
+  function renderPlans() {
+    const area = $("plansArea");
+    if (!plans.length) {
+      area.innerHTML = '<div style="color:#888;padding:12px;font-size:13px;">目前沒有可用方案</div>';
+      return;
+    }
+    area.innerHTML = plans.map((p, idx) => {
+      const tier = Math.min(idx + 1, 3);
+      const total = p.payAmount + p.bonusAmount;
+      return `
+        <div class="plan-card tier-${tier}">
+          <div class="pay-row">
+            <span class="pay-amount">${p.payAmount.toLocaleString()}</span>
+            <span class="pay-unit">元</span>
+          </div>
+          <div class="bonus-row">
+            <span class="bonus-tag">送 ${p.bonusAmount.toLocaleString()}</span>
+            <span class="valid-tag">期限 ${p.validDays} 天</span>
+          </div>
+          <div class="total-line">付 ${p.payAmount.toLocaleString()} 元 → 總計可用 <strong>NT$${total.toLocaleString()}</strong></div>
+          <button class="topup-btn" data-idx="${idx}">我要這個方案</button>
+        </div>
+      `;
+    }).join("");
+
+    // 綁按鈕
+    area.querySelectorAll(".topup-btn").forEach(btn => {
+      btn.addEventListener("click", () => openTopupModal(Number(btn.dataset.idx)));
+    });
+  }
+
+  // === 載入我的餘額 ===
+  async function loadMyCredit() {
+    if (!liffProfile) return;
+    const card = $("balanceCard");
+    try {
+      const res = await fetch(LIFF_API_URL + "?action=getMyCredit&liffUserId=" + encodeURIComponent(liffProfile.userId));
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      if (!data.registered) {
+        registered = false;
+        card.style.display = "none";
+        $("registerHint").style.display = "block";
+        $("recentTable").innerHTML = '<div class="empty-state">登記後即可查詢交易紀錄</div>';
+        return;
+      }
+
+      registered = true;
+      const balanceStr = data.currentBalance.toLocaleString();
+      const lastSpent = data.lastSpentDate || "（無）";
+      const isEmpty = data.currentBalance <= 0;
+      card.className = "balance-card" + (isEmpty ? " empty" : "");
+      card.innerHTML = `
+        <div class="label">目前餘額</div>
+        <div class="amount"><span class="currency">NT$</span>${balanceStr}</div>
+        <div class="meta">最後消費：${lastSpent}　·　累積消費：${data.txnCount} 筆</div>
+      `;
+      renderRecent(data.recent || []);
+    } catch (e) {
+      card.className = "balance-card error";
+      card.innerHTML = `
+        <div class="label">⚠️ 載入失敗</div>
+        <div class="amount">${e.message || e}</div>
+      `;
+    }
+  }
+
+  function renderRecent(recent) {
+    const wrap = $("recentTable");
+    if (!recent.length) {
+      wrap.innerHTML = '<div class="empty-state">尚無交易紀錄</div>';
+      return;
+    }
+    const rows = recent.map(t => {
+      const isTopup = String(t.topup || "").trim() !== "";
+      const itemDisplay = isTopup
+        ? '<span style="color:#2a7a2a;">💰 儲值 ' + t.topup + '</span>'
+        : (t.item || "");
+      const spent = t.spent ? "−" + t.spent : "";
+      return `
+        <tr class="${isTopup ? 'topup-row' : ''}">
+          <td>${escapeHtml(t.date)}</td>
+          <td>${itemDisplay}</td>
+          <td>${escapeHtml(spent)}</td>
+          <td class="balance-col">${escapeHtml(t.balance)}</td>
+        </tr>
+      `;
+    }).join("");
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr><th>日期</th><th>項目</th><th>金額</th><th class="balance-col">餘額</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // === 申請儲值 modal ===
+  let pendingPlan = null;
+  function openTopupModal(idx) {
+    if (!registered) {
+      toast("請先登記客戶資料", true);
+      return;
+    }
+    pendingPlan = plans[idx];
+    if (!pendingPlan) return;
+    $("mPlan").textContent = pendingPlan.name;
+    $("mPay").textContent = pendingPlan.payAmount.toLocaleString();
+    $("mBonus").textContent = pendingPlan.bonusAmount.toLocaleString();
+    $("mTotal").textContent = (pendingPlan.payAmount + pendingPlan.bonusAmount).toLocaleString();
+    $("modalMask").classList.add("show");
+  }
+
+  $("mCancel").addEventListener("click", () => $("modalMask").classList.remove("show"));
+  $("modalMask").addEventListener("click", (e) => {
+    if (e.target === $("modalMask")) $("modalMask").classList.remove("show");
+  });
+  $("mConfirm").addEventListener("click", submitTopup);
+
+  async function submitTopup() {
+    if (!pendingPlan || !liffProfile) return;
+    const btn = $("mConfirm");
+    btn.disabled = true;
+    btn.textContent = "送出中…";
+
+    try {
+      const res = await fetch(LIFF_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // 避開 CORS preflight
+        body: JSON.stringify({
+          action: "requestTopup",
+          liffUserId: liffProfile.userId,
+          planName: pendingPlan.name,
+          payAmount: pendingPlan.payAmount,
+          bonusAmount: pendingPlan.bonusAmount,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      toast(data.message || "已通知店家");
+      $("modalMask").classList.remove("show");
+    } catch (e) {
+      toast("申請失敗：" + (e.message || e), true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "確定申請";
+    }
+  }
+</script>
+</body>
+</html>
