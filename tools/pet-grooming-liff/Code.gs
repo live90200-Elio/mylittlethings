@@ -137,6 +137,7 @@ function upsertCustomer(phone, data, hashPayload) {
     // 新增一列
     const newRow = headers.map((h) => (h in fieldMap ? fieldMap[h] : ""));
     sheet.appendRow(newRow);
+    rowIndex = sheet.getLastRow();
   } else {
     // 更新：只寫有 header 對應到的欄位；姓名/寵物1名/寵物1品種/美容備註 只在原格空白時寫（不蓋老闆手填）
     const range = sheet.getRange(rowIndex, 1, 1, headers.length);
@@ -148,6 +149,12 @@ function upsertCustomer(phone, data, hashPayload) {
       current[i] = fieldMap[h];
     });
     range.setValues([current]);
+  }
+
+  // 防 Sheets 把 09xxx 開頭 0 當數字吃掉：強制把電話 cell 設成文字格式再重寫值
+  const phoneHeaderIdx = headers.indexOf("電話");
+  if (phoneHeaderIdx >= 0 && rowIndex > 0) {
+    sheet.getRange(rowIndex, phoneHeaderIdx + 1).setNumberFormat("@").setValue(phone);
   }
 }
 
@@ -168,6 +175,10 @@ function appendContractRecord(phone, data, pdfUrl, hash) {
     hash,                   // H SHA256 哈希
     data.liffUserId || "",  // I LINE userId
   ]);
+
+  // 防 09xxx 開頭 0 被當數字吃掉
+  const lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow, 2).setNumberFormat("@").setValue(phone);
 }
 
 // ======= 產 PDF 契約 =======
