@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>客戶查詢 🐾</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root {
+      --bg: #fdf6f0;
+      --bg2: #fff9f5;
+      --panel: #ffffff;
+      --text: #3d2c1e;
+      --muted: #9b8577;
+      --line: #f0e0d4;
+      --primary: #6cba8b;
+      --primary-dark: #4fa572;
+      --primary-light: #e8f7ee;
+      --accent: #ff8c69;
+      --accent-light: #fff0eb;
+      --lavender: #b39ddb;
+      --lavender-light: #f3effc;
+      --danger-bg: #ffebeb;
+      --danger: #e05050;
+      --gold: #f0a500;
+      --gold-light: #fff9e6;
+      --shadow-sm: 0 2px 10px rgba(100,60,20,.07);
+      --shadow-md: 0 6px 24px rgba(100,60,20,.10);
+      --shadow-lg: 0 12px 40px rgba(100,60,20,.13);
+      --radius-sm: 12px;
+      --radius-md: 20px;
+      --radius-lg: 28px;
+      --font: 'Nunito', -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      background-image:
+        radial-gradient(circle at 15% 10%, rgba(108,186,139,.08) 0%, transparent 50%),
+        radial-gradient(circle at 85% 80%, rgba(255,140,105,.07) 0%, transparent 50%);
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.5;
+    }
+
+    /* ─── Paw pattern bg ─── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' opacity='0.035'%3E%3Cellipse cx='40' cy='48' rx='14' ry='16' fill='%23b87a50'/%3E%3Ccircle cx='22' cy='28' r='7' fill='%23b87a50'/%3E%3Ccircle cx='40' cy='22' r='7' fill='%23b87a50'/%3E%3Ccircle cx='58' cy='28' r='7' fill='%23b87a50'/%3E%3Ccircle cx='30' cy='35' r='5.5' fill='%23b87a50'/%3E%3Ccircle cx='50' cy='35' r='5.5' fill='%23b87a50'/%3E%3C/svg%3E");
+      background-size: 80px 80px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      width: min(720px, 100%);
+      margin: 0 auto;
+      padding: calc(18px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+    }
+
+    /* ─── Topbar ─── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-paw {
+      width: 54px;
+      height: 54px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 4px 14px rgba(108,186,139,.4);
+      flex-shrink: 0;
+      animation: bouncein .5s cubic-bezier(.34,1.56,.64,1) both;
+    }
+
+    @keyframes bouncein {
+      from { transform: scale(0.5) rotate(-15deg); opacity: 0; }
+      to   { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    .topbar-title { animation: fadein .4s ease .1s both; }
+    @keyframes fadein { from { opacity:0; transform:translateY(6px);} to {opacity:1; transform:none;} }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--text);
+      letter-spacing: -.3px;
+    }
+
+    .subtitle {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    .profile-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 12px;
+      background: var(--panel);
+      border: 1.5px solid var(--line);
+      border-radius: 999px;
+      box-shadow: var(--shadow-sm);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      max-width: 130px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      animation: fadein .4s ease .2s both;
+    }
+
+    /* ─── Search Box ─── */
+    .search-box {
+      position: sticky;
+      top: env(safe-area-inset-top, 0px);
+      z-index: 10;
+      padding: 16px;
+      background: rgba(255,255,255,.95);
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      backdrop-filter: blur(16px);
+      animation: fadein .4s ease .15s both;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr 46px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .search-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 13px;
+      font-size: 18px;
+      pointer-events: none;
+      line-height: 1;
+    }
+
+    input[type="search"] {
+      width: 100%;
+      height: 46px;
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 0 14px 0 42px;
+      background: var(--bg2);
+      color: var(--text);
+      font-size: 17px;
+      font-family: var(--font);
+      font-weight: 600;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+
+    input[type="search"]:focus {
+      border-color: var(--primary);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(108,186,139,.18);
+    }
+
+    input[type="search"]::placeholder { color: #c5b4a8; font-weight: 600; }
+
+    .refresh-btn {
+      width: 46px;
+      height: 46px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      font-size: 22px;
+      font-weight: 900;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 3px 10px rgba(108,186,139,.35);
+      transition: transform .15s, box-shadow .15s;
+    }
+    .refresh-btn:active { transform: scale(.92); box-shadow: none; }
+    .refresh-btn:disabled { opacity: .5; cursor: wait; }
+
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    .meta b { color: var(--primary-dark); }
+
+    .updatedAt-tag {
+      background: var(--primary-light);
+      color: var(--primary-dark);
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+
+    /* ─── Filter Chips ─── */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .quick-chip {
+      border: 1.5px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 13px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all .18s cubic-bezier(.34,1.56,.64,1);
+    }
+    .quick-chip:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+    .quick-chip.active {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(108,186,139,.35);
+      transform: translateY(-1px);
+    }
+    .quick-chip[data-filter="alert"].active {
+      background: linear-gradient(135deg, #ff8c69 0%, #e8604a 100%);
+      box-shadow: 0 3px 10px rgba(255,140,105,.35);
+    }
+    .quick-chip[data-filter="balance"].active {
+      background: linear-gradient(135deg, var(--gold) 0%, #d48e00 100%);
+      box-shadow: 0 3px 10px rgba(240,165,0,.35);
+    }
+    .quick-chip[data-filter="zero"].active {
+      background: linear-gradient(135deg, var(--lavender) 0%, #9575cd 100%);
+      box-shadow: 0 3px 10px rgba(179,157,219,.4);
+    }
+
+    /* ─── List & Cards ─── */
+    .list {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
+      animation: cardIn .35s ease both;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+    @keyframes cardIn {
+      from { opacity:0; transform: translateY(12px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    .card-accent-bar {
+      height: 5px;
+      background: linear-gradient(90deg, var(--primary) 0%, #a8e6c1 100%);
+    }
+    .card.has-alert .card-accent-bar {
+      background: linear-gradient(90deg, var(--danger) 0%, var(--accent) 100%);
+    }
+
+    .card-body { padding: 16px; }
+
+    /* customer head */
+    .customer-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .name-wrap {}
+    .name {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -.2px;
+      overflow-wrap: anywhere;
+      color: var(--text);
+    }
+
+    .phone-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 5px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      background: var(--primary-light);
+      color: var(--primary-dark);
+      font-size: 13.5px;
+      font-weight: 700;
+      text-decoration: none;
+      font-variant-numeric: tabular-nums;
+      transition: background .15s;
+    }
+    .phone-link:hover { background: #d0f0e0; }
+
+    /* Pets */
+    .pet-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 13px;
+    }
+
+    .pet {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      border: 1.5px solid rgba(108,186,139,.3);
+      background: var(--primary-light);
+      color: var(--primary-dark);
+      font-size: 13.5px;
+      font-weight: 700;
+    }
+
+    .pet-icon { font-size: 15px; }
+
+    /* Alerts */
+    .alert-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-top: 13px;
+    }
+
+    .alert {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 13px;
+      border-radius: var(--radius-sm);
+      background: var(--danger-bg);
+      border: 1.5px solid rgba(224,80,80,.18);
+      color: var(--danger);
+      font-size: 13.5px;
+      font-weight: 700;
+    }
+
+    .alert-icon { font-size: 16px; flex-shrink: 0; }
+
+    /* Money */
+    .money-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-top: 14px;
+    }
+
+    .money {
+      padding: 13px 14px;
+      border-radius: var(--radius-md);
+      background: var(--bg2);
+      border: 1.5px solid var(--line);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .money.balance-ok { background: var(--gold-light); border-color: rgba(240,165,0,.25); }
+    .money.balance-low { background: var(--danger-bg); border-color: rgba(224,80,80,.2); }
+
+    .money::after {
+      content: attr(data-icon);
+      position: absolute;
+      right: 10px;
+      bottom: 6px;
+      font-size: 28px;
+      opacity: .12;
+      line-height: 1;
+    }
+
+    .money .label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    .money .value {
+      margin-top: 5px;
+      font-size: 23px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+    .money.balance-ok .value { color: var(--gold); }
+    .money.balance-low .value { color: var(--danger); }
+
+    /* Info grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 9px;
+      margin-top: 14px;
+    }
+
+    .info-cell {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg2);
+      border: 1.5px solid var(--line);
+    }
+
+    .info-cell .label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      margin-bottom: 3px;
+    }
+
+    .info-cell .val {
+      color: var(--text);
+      font-size: 13.5px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    /* Notes */
+    .note {
+      display: flex;
+      gap: 9px;
+      margin-top: 13px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: #fffbf0;
+      border: 1.5px solid rgba(240,165,0,.22);
+      color: #6b5520;
+      font-size: 13.5px;
+      font-weight: 600;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .note-icon { font-size: 17px; flex-shrink: 0; margin-top: 1px; }
+
+    mark {
+      border-radius: 4px;
+      padding: 1px 3px;
+      background: #ffe168;
+      color: inherit;
+    }
+
+    /* ─── Status screens ─── */
+    .status {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px 24px;
+      border-radius: var(--radius-lg);
+      background: var(--panel);
+      border: 1.5px solid var(--line);
+      box-shadow: var(--shadow-sm);
+      animation: fadein .4s ease both;
+    }
+
+    .status-icon {
+      font-size: 56px;
+      line-height: 1;
+      margin-bottom: 12px;
+      animation: wobble 2.4s ease-in-out infinite;
+    }
+
+    @keyframes wobble {
+      0%,100% { transform: rotate(-4deg) scale(1); }
+      50%      { transform: rotate(4deg) scale(1.07); }
+    }
+
+    .status-title {
+      font-size: 19px;
+      font-weight: 900;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .status-msg {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      max-width: 280px;
+      line-height: 1.6;
+    }
+
+    .retry-btn {
+      margin-top: 18px;
+      padding: 12px 26px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 800;
+      font-family: var(--font);
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(108,186,139,.4);
+      transition: transform .15s, box-shadow .15s;
+    }
+    .retry-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(108,186,139,.5); }
+    .retry-btn:active { transform: scale(.95); }
+
+    .hidden { display: none !important; }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 500px) {
+      h1 { font-size: 21px; }
+      .logo-paw { width: 46px; height: 46px; border-radius: 14px; }
+      .customer-head { flex-direction: column; gap: 4px; }
+      .money-row { grid-template-columns: 1fr; }
+      .info-grid { grid-template-columns: 1fr; }
+      .name { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="logo-paw">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <ellipse cx="16" cy="20" rx="8" ry="9" fill="white" opacity=".95"/>
+            <circle cx="7" cy="11" r="4" fill="white" opacity=".9"/>
+            <circle cx="16" cy="8" r="4" fill="white" opacity=".9"/>
+            <circle cx="25" cy="11" r="4" fill="white" opacity=".9"/>
+            <circle cx="11.5" cy="16" r="3" fill="white" opacity=".8"/>
+            <circle cx="20.5" cy="16" r="3" fill="white" opacity=".8"/>
+          </svg>
+        </div>
+        <div class="topbar-title">
+          <h1>客戶查詢 🐾</h1>
+          <div class="subtitle">電話・姓名・寵物名・品種</div>
+        </div>
+      </div>
+      <div id="profile" class="profile-badge" style="display:none">
+        <span>🐶</span><span id="profileName"></span>
+      </div>
+    </header>
+
+    <section id="searchPanel" class="search-box hidden">
+      <div class="search-row">
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input id="q" type="search" inputmode="search" autocomplete="off"
+            placeholder="搜尋 0912、王小明、Lucky…">
+        </div>
+        <button id="refresh" class="refresh-btn" type="button" aria-label="重新整理" title="重新整理">↻</button>
+      </div>
+      <div class="meta">
+        <span>共 <b id="total">0</b> 筆，顯示 <b id="visible">0</b> 筆</span>
+        <span id="updatedAt" class="updatedAt-tag" style="display:none"></span>
+      </div>
+      <div class="chips" aria-label="快速篩選">
+        <span class="quick-chip active" data-filter="all">🐾 全部</span>
+        <span class="quick-chip" data-filter="alert">🚨 有提醒</span>
+        <span class="quick-chip" data-filter="balance">💰 有儲值</span>
+        <span class="quick-chip" data-filter="zero">🪙 餘額為 0</span>
+      </div>
+    </section>
+
+    <section id="results" class="list"></section>
+  </main>
+
+  <script>
+    const LIFF_ID = "2009523185-49rQ33n5";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby99prBN40uYrIQhquDPMoTepPaJ5kNX-IHPSOACBM5Ebi0vlsZ4dxk3x44yUlfwFoa/exec";
+
+    /* ── Pet icon helper ── */
+    const PET_ICONS = {
+      '貓':'🐱','cat':'🐱','kitty':'🐱',
+      '狗':'🐶','dog':'🐶','犬':'🐶',
+      '兔':'🐰','rabbit':'🐰','兔子':'🐰',
+      '鳥':'🐦','bird':'🐦','鸚鵡':'🦜',
+      '倉鼠':'🐹','hamster':'🐹',
+      '烏龜':'🐢','turtle':'🐢',
+      '蜥蜴':'🦎','lizard':'🦎',
+      '魚':'🐟','fish':'🐟',
+    };
+    function petIcon(pet) {
+      const target = ((pet.breed||'')+(pet.name||'')).toLowerCase();
+      for (const [k,v] of Object.entries(PET_ICONS)) {
+        if (target.includes(k.toLowerCase())) return v;
+      }
+      return '🐾';
+    }
+
+    const state = {
+      profile: null,
+      accessToken: "",
+      customers: [],
+      filter: "all",
+      loading: false
+    };
+
+    const el = {
+      profile:      document.getElementById("profile"),
+      profileName:  document.getElementById("profileName"),
+      searchPanel:  document.getElementById("searchPanel"),
+      q:            document.getElementById("q"),
+      refresh:      document.getElementById("refresh"),
+      total:        document.getElementById("total"),
+      visible:      document.getElementById("visible"),
+      updatedAt:    document.getElementById("updatedAt"),
+      results:      document.getElementById("results"),
+      chips:        Array.from(document.querySelectorAll(".quick-chip"))
+    };
+
+    init();
+
+    async function init() {
+      showStatus("🐾", "正在開啟 LINE LIFF", "請稍候，正在確認登入身分。");
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) { liff.login({ redirectUri: window.location.href }); return; }
+        state.profile = await liff.getProfile();
+        state.accessToken = liff.getAccessToken();
+        el.profileName.textContent = state.profile.displayName || "";
+        el.profile.style.display = "flex";
+        await loadCustomers();
+        bindEvents();
+      } catch (err) {
+        showStatus("😿", "無法開啟 LIFF", toErrorMessage(err), true);
+      }
+    }
+
+    function bindEvents() {
+      el.q.addEventListener("input", render);
+      el.refresh.addEventListener("click", loadCustomers);
+      el.chips.forEach(chip => {
+        chip.addEventListener("click", () => {
+          state.filter = chip.dataset.filter;
+          el.chips.forEach(c => c.classList.toggle("active", c === chip));
+          render();
+        });
+      });
+    }
+
+    async function loadCustomers() {
+      if (!state.accessToken) {
+        showStatus("🔒", "尚未登入", "請從 LINE 官方帳號選單重新開啟此頁。", true);
+        return;
+      }
+      state.loading = true;
+      el.refresh.disabled = true;
+      showStatus("🐾", "讀取資料中", "正在從 Google Sheets 取得最新客戶資料。");
+      try {
+        const url = new URL(APPS_SCRIPT_URL);
+        url.searchParams.set("action", "customers");
+        url.searchParams.set("token", state.accessToken);
+        const res = await fetch(url.toString(), { redirect: "follow" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const payload = await res.json();
+        if (!payload.ok) throw new Error(payload.message || "讀取失敗");
+        state.customers = Array.isArray(payload.customers) ? payload.customers : [];
+        el.searchPanel.classList.remove("hidden");
+        const upd = formatUpdated(payload.updatedAt);
+        if (upd) {
+          el.updatedAt.textContent = "🕐 " + upd;
+          el.updatedAt.style.display = "inline-block";
+        }
+        render();
+      } catch (err) {
+        showStatus("😿", "讀取失敗", toErrorMessage(err), true);
+      } finally {
+        state.loading = false;
+        el.refresh.disabled = false;
+      }
+    }
+
+    function render() {
+      const term = el.q.value.trim();
+      const norm = normalize(term);
+      const rows = state.customers
+        .filter(c => quickFilter(c, state.filter))
+        .filter(c => matches(c, norm));
+
+      el.total.textContent = String(state.customers.length);
+      el.visible.textContent = String(rows.length);
+
+      if (rows.length === 0) {
+        showStatus("🔍", "查無資料", "請換電話、姓名、寵物名或品種再查一次。");
+        return;
+      }
+      el.results.innerHTML = rows.map((c, i) => renderCard(c, term, i)).join("");
+    }
+
+    function renderCard(customer, term, idx) {
+      const alerts  = Array.isArray(customer.alerts) ? customer.alerts : [];
+      const pets    = Array.isArray(customer.pets)   ? customer.pets   : [];
+      const balance = Number(customer.balance || 0);
+      const amount  = Number(customer.currentAmount || 0);
+      const lowBalance = balance <= 0;
+      const delay   = Math.min(idx * 50, 300);
+
+      const balanceClass = balance > 0 ? 'balance-ok' : 'balance-low';
+
+      return `
+        <article class="card ${alerts.length ? "has-alert" : ""}" style="animation-delay:${delay}ms">
+          <div class="card-accent-bar"></div>
+          <div class="card-body">
+            <div class="customer-head">
+              <div class="name-wrap">
+                <div class="name">${highlight(customer.name || "未填姓名", term)}</div>
+                ${customer.phone ? `<a class="phone-link" href="tel:${escapeAttr(customer.phone)}">📞 ${highlight(customer.phone, term)}</a>` : ''}
+              </div>
+            </div>
+
+            ${pets.length ? `
+              <div class="pet-list">
+                ${pets.map(pet => `
+                  <span class="pet">
+                    <span class="pet-icon">${petIcon(pet)}</span>
+                    ${highlight(pet.name || "未填寵物名", term)}${pet.breed ? ` <span style="opacity:.65;font-weight:600">/ ${highlight(pet.breed, term)}</span>` : ''}
+                  </span>
+                `).join('')}
+              </div>` : ''}
+
+            ${alerts.length ? `
+              <div class="alert-list">
+                ${alerts.map(a => `
+                  <div class="alert">
+                    <span class="alert-icon">⚠️</span>
+                    <span>${escapeHtml(a)}</span>
+                  </div>
+                `).join('')}
+              </div>` : ''}
+
+            <div class="money-row">
+              <div class="money ${balanceClass}" data-icon="💰">
+                <div class="label">💳 儲值金餘額</div>
+                <div class="value">${formatMoney(balance)}</div>
+              </div>
+              <div class="money" data-icon="🧾">
+                <div class="label">🛁 本次金額</div>
+                <div class="value">${formatMoney(amount)}</div>
+              </div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-cell">
+                <div class="label">🐾 最近到店</div>
+                <div class="val">${escapeHtml(customer.lastVisit || "未記錄")}</div>
+              </div>
+              <div class="info-cell">
+                <div class="label">✂️ 本次服務</div>
+                <div class="val">${escapeHtml(customer.currentService || "未記錄")}</div>
+              </div>
+              <div class="info-cell">
+                <div class="label">📅 建立時間</div>
+                <div class="val">${escapeHtml(customer.createdAt || "未記錄")}</div>
+              </div>
+              <div class="info-cell">
+                <div class="label">🌱 來源</div>
+                <div class="val">${escapeHtml(customer.source || "未記錄")}</div>
+              </div>
+            </div>
+
+            ${customer.notes ? `
+              <div class="note">
+                <span class="note-icon">📝</span>
+                <span>${escapeHtml(customer.notes)}</span>
+              </div>` : ''}
+          </div>
+        </article>
+      `;
+    }
+
+    function quickFilter(customer, filter) {
+      const balance = Number(customer.balance || 0);
+      if (filter === "alert")   return Array.isArray(customer.alerts) && customer.alerts.length > 0;
+      if (filter === "balance") return balance > 0;
+      if (filter === "zero")    return balance <= 0;
+      return true;
+    }
+
+    function matches(customer, term) {
+      if (!term) return true;
+      const src = [
+        customer.phone, customer.name, customer.notes,
+        customer.currentService, customer.source,
+        ...(customer.alerts || []),
+        ...(customer.pets || []).flatMap(p => [p.name, p.breed])
+      ].join(" ");
+      return normalize(src).includes(term);
+    }
+
+    function highlight(text, term) {
+      const v = escapeHtml(text || "");
+      if (!term) return v;
+      return v.replace(new RegExp(escapeRegExp(escapeHtml(term)), "gi"), m => `<mark>${m}</mark>`);
+    }
+
+    function showStatus(icon, title, message, retry) {
+      el.results.innerHTML = `
+        <div class="status">
+          <div class="status-icon">${escapeHtml(icon)}</div>
+          <div class="status-title">${escapeHtml(title)}</div>
+          <div class="status-msg">${escapeHtml(message)}</div>
+          ${retry ? `<button class="retry-btn" type="button" onclick="location.reload()">🔄 重新開啟</button>` : ""}
+        </div>
+      `;
+    }
+
+    function normalize(v) { return String(v||"").toLowerCase().replace(/\s+/g,""); }
+    function formatMoney(v) { return "NT$ " + Number(v||0).toLocaleString("zh-TW"); }
+    function formatUpdated(v) {
+      if (!v) return "";
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return "";
+      return d.toLocaleString("zh-TW", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+    }
+    function toErrorMessage(e) { return e && e.message ? e.message : String(e||"發生未知錯誤"); }
+    function escapeRegExp(v) { return String(v).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); }
+    function escapeAttr(v) { return escapeHtml(v).replace(/"/g,"&quot;"); }
+    function escapeHtml(v) {
+      return String(v||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+  </script>
+</body>
+</html>

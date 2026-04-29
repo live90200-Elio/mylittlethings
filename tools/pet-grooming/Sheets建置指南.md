@@ -147,3 +147,148 @@ B2：=SUMIFS(原始資料匯入!E:E, 原始資料匯入!A:A, ">="&DATE(2026,4,1)
 - [ ] 工作表 2 寫 SUMIFS 算月總營收
 - [ ] 店內平板登入員工共用帳號、登出老闆帳號
 - [ ] 回來跟 Claude 說「接 Apps Script」把查詢頁接上實際資料
+
+---
+
+## 2026-04-29 更新紀錄：LINE LIFF 客戶查詢上線流程
+
+本次調整目標：把客戶查詢頁改成可放在 LINE LIFF 選單中使用，並確保 GitHub Pages 前端公開時不會直接暴露客戶資料。
+
+### 目前檔案分工
+
+- `customer.html`
+  - GitHub Pages 上線使用的 LIFF 前端頁面。
+  - Endpoint URL 對應：`https://live90200-elio.github.io/line-clock/customer.html`
+  - LIFF URL 對應：`https://liff.line.me/2009523185-49rQ33n5`
+
+- `customer-cute.html`
+  - UX/UI 優化版本。
+  - 檢查通過後，可把內容複製到 GitHub 上的 `customer.html` 覆蓋更新。
+  - 只改前端畫面，不改後端安全邏輯。
+
+- `Code.gs`
+  - Google Apps Script 後端 API。
+  - 負責讀取 Google Sheets、驗證 LINE access token、檢查白名單 userId。
+  - 必須部署成 Web App，前端才拿得到資料。
+
+### LIFF 設定
+
+- LIFF ID：`2009523185-49rQ33n5`
+- LIFF app name：`客戶查詢`
+- Size：`Full`
+- Endpoint URL：`https://live90200-elio.github.io/line-clock/customer.html`
+- LINE 官方帳號選單連結：`https://liff.line.me/2009523185-49rQ33n5`
+- 選單動作標籤：`客戶查詢`
+
+### 安全流程
+
+GitHub Pages 上的 `customer.html` 是公開檔案，任何人都可能開啟網址或看見前端程式碼。安全性不能放在前端判斷，必須由 Apps Script 後端控管。
+
+目前安全流程如下：
+
+1. 使用者從 LINE 選單開啟 LIFF。
+2. `customer.html` 執行 `liff.init()`。
+3. 若尚未登入 LINE，前端執行 `liff.login()`。
+4. 登入後，前端用 `liff.getAccessToken()` 取得 LINE access token。
+5. 前端呼叫 Apps Script Web App，傳送 `action=customers` 與 `token=<LINE access token>`。
+6. Apps Script 用 `UrlFetchApp.fetch("https://api.line.me/v2/profile")` 向 LINE 官方驗證 token。
+7. LINE 回傳真正的 `userId`。
+8. Apps Script 比對 `ALLOWED_LINE_USER_IDS` 白名單。
+9. 只有白名單內的 LINE userId 才回傳客戶資料。
+10. 未授權帳號回傳：`此帳號未授權，請聯絡店長`。
+
+重點：不要改回只傳 `?userId=xxx` 的版本，因為 userId 可以被偽造。必須用 LINE access token 由後端向 LINE 官方驗證。
+
+### 目前允許查看資料的 LINE userId
+
+白名單位置：`Code.gs`
+
+```js
+const ALLOWED_LINE_USER_IDS = {
+  "Uc91d607de27558c937af89be42699678": "員工A",
+  "U5098240716740dd49287db197da9c878": "員工B",
+  "U61199309b9ff3f86b4872f1aeb147418": "員工C",
+  "Udb797fdc8b926bff6f972be748450ecb": "員工D"
+};
+```
+
+新增或移除可查詢人員時，只修改這個白名單，然後重新部署 Apps Script 新版本。
+
+### Google Sheets 欄位
+
+Apps Script 讀取分頁名稱：`客戶資料`
+
+| 欄位 | 內容 |
+|---|---|
+| A | 電話 |
+| B | 姓名 |
+| C | 寵物1名 |
+| D | 寵物1品種 |
+| E | 寵物2 |
+| F | 寵物2品種 |
+| G | 重要提醒 |
+| H | 美容備註 |
+| I | 儲值金餘額 |
+| J | 最近到店 |
+| K | 建立時間 |
+| L | 來源 |
+| M | 本次服務 |
+| N | 本次金額 |
+| O | LINE_userId |
+
+### Apps Script 首次授權流程
+
+如果手機畫面出現類似：
+
+```text
+你沒有呼叫「UrlFetchApp.fetch」的權限
+```
+
+代表 Apps Script 尚未授權呼叫外部 API。處理方式：
+
+1. 到 Apps Script 編輯器。
+2. 確認已貼上新版 `Code.gs`。
+3. 儲存。
+4. 上方函式選單選 `authorizeServices`。
+5. 按「執行」。
+6. 依 Google 提示完成授權。
+7. 授權後重新部署 Web App 新版本。
+
+`authorizeServices()` 只需要在首次授權或權限異動時手動執行。
+
+### Apps Script 部署設定
+
+部署 Web App 時建議設定：
+
+- 執行身分：`我`
+- 存取權：`任何人`
+- 每次修改 `Code.gs` 後：儲存，部署，管理部署作業，編輯目前部署，版本選「新增版本」，再部署。
+
+說明：Web App 設為「任何人」是為了讓 LIFF 前端可以呼叫 API；真正資料權限由後端的 LINE token 驗證與白名單控管。
+
+### UX/UI 更新流程
+
+只改畫面時，不一定要改 Apps Script。
+
+更新前端 UI 的流程：
+
+1. 在本地修改或檢查 `customer-cute.html`。
+2. 確認以下項目仍存在：
+   - `LIFF_ID = "2009523185-49rQ33n5"`
+   - `APPS_SCRIPT_URL` 指向目前 Apps Script `/exec`
+   - `liff.init()`
+   - `liff.isLoggedIn()`
+   - `liff.getAccessToken()`
+   - 呼叫 Apps Script 時傳 `action=customers` 和 `token`
+3. 確認前端沒有寫入客戶假資料、白名單 userId 或繞過登入的邏輯。
+4. 把 `customer-cute.html` 的完整內容複製到 GitHub repo 的 `customer.html`。
+5. 等 GitHub Pages 更新後，從 LINE 選單重新開啟測試。
+
+### 今日確認結果
+
+- `customer-cute.html` 的 JavaScript 語法檢查通過。
+- `customer-cute.html` 保留 LIFF 登入與 token 傳後端流程。
+- 前端沒有包含客戶資料。
+- 前端沒有包含白名單 userId。
+- 白名單與客戶資料存取仍由 Apps Script 後端負責。
+- 若已確認新版 `Code.gs` 部署成功，則可以只把 `customer-cute.html` 覆蓋到 GitHub 的 `customer.html` 來更新 UI。
