@@ -262,6 +262,142 @@ function recomputeSummary() {
 }
 
 // ============================================================
+// 把檔案 B「客戶總覽」中還沒在檔案 A「客戶資料」的客戶補進去
+// 已存在的不動（不覆蓋老闆手填的資料）。Idempotent，可重跑。
+// 4/30 灌完 21 位儲值客戶後跑一次，員工查詢頁就找得到他們了。
+// ============================================================
+function syncCreditCustomersToFileA() {
+  const fileA = openCustomerFile().getSheetByName(SHEET_CUSTOMER);
+  const fileB = openLedger().getSheetByName(SHEET_SUMMARY);
+  if (!fileA || !fileB) throw new Error("找不到必要分頁");
+
+  // 讀檔案 A 既有電話（normalize 後）
+  const aData = fileA.getDataRange().getValues();
+  const aHeaders = aData[0].map(h => String(h || "").trim());
+  const phoneColA = aHeaders.indexOf("電話");
+  if (phoneColA < 0) throw new Error("檔案 A 找不到「電話」欄");
+  const existing = new Set();
+  for (let i = 1; i < aData.length; i++) {
+    const p = normalizePhone(aData[i][phoneColA]);
+    if (p) existing.add(p);
+  }
+
+  // 讀檔案 B 客戶總覽
+  // 欄序：# | 客戶姓名 | 電話 | 寵物 | 目前餘額 | 消費筆數 | 最後消費日 | 備註
+  const bData = fileB.getDataRange().getValues();
+  const newRows = [];
+  let skipped = 0;
+  for (let i = 1; i < bData.length; i++) {
+    const phoneRaw = String(bData[i][2] || "").trim();
+    if (!phoneRaw) continue;
+    const phoneKey = normalizePhone(phoneRaw);
+    if (!phoneKey) continue;
+    if (existing.has(phoneKey)) { skipped++; continue; }
+
+    const name = String(bData[i][1] || "").trim();
+    const petStr = String(bData[i][3] || "").trim();
+    const petParts = petStr.split("/").map(s => s.trim()).filter(Boolean);
+    const pet1 = petParts[0] || "";
+    const pet2 = petParts[1] || "";
+    const extraPets = petParts.slice(2).join("、");
+
+    // 雙電話：第一支當主電話（normalize 純數字），其他放美容備註
+    const phoneParts = phoneRaw.split("/").map(s => s.trim()).filter(Boolean);
+    const primaryPhone = normalizePhone(phoneParts[0] || "");  // 0910960624
+    const extraPhones = phoneParts.slice(1).map(p => normalizePhone(p)).filter(Boolean);
+
+    const noteParts = [];
+    if (extraPhones.length) noteParts.push("另有電話：" + extraPhones.join("、"));
+    if (extraPets) noteParts.push("另有寵物：" + extraPets);
+    const notes = noteParts.join("；");
+
+    // 用檔案 A 的 header 順序組 row（header-based，欄序動了不會壞）
+    const row = aHeaders.map(h => {
+      switch (h) {
+        case "電話":     return primaryPhone;
+        case "姓名":     return name;
+        case "寵物1名":  return pet1;
+        case "寵物2":    return pet2;
+        case "美容備註": return notes;
+        case "建立時間": return new Date();
+        case "來源":     return "儲值帳本同步";
+        default:         return "";
+      }
+    });
+    newRows.push({ row: row, phone: primaryPhone });
+    existing.add(phoneKey);
+  }
+
+  // 一次 append 完所有新增列
+  if (newRows.length) {
+    const startRow = fileA.getLastRow() + 1;
+    fileA.getRange(startRow, 1, newRows.length, aHeaders.length)
+         .setValues(newRows.map(x => x.row));
+    // 強制電話欄文字格式 + 重寫值（防 09xxx 開頭 0 被吃掉，跟 LIFF upsert 同套防呆）
+    for (let i = 0; i < newRows.length; i++) {
+      fileA.getRange(startRow + i, phoneColA + 1)
+           .setNumberFormat("@")
+           .setValue(newRows[i].phone);
+    }
+  }
+
+  Logger.log("syncCreditCustomersToFileA: 新增 " + newRows.length + " 位，跳過既有 " + skipped + " 位");
+  return { added: newRows.length, skipped: skipped };
+}
+
+// ============================================================
+// 一次性修：把「儲值帳本同步」來源的列電話從 0910-960-624 改成 0910960624
+// + 雙電話客戶把第二支搬到美容備註
+// 4/30 第一版 sync 寫了帶橫線格式違反資料驗證，跑這個函式清理。Idempotent。
+// ============================================================
+function fixSyncedPhonesFormat() {
+  const fileA = openCustomerFile().getSheetByName(SHEET_CUSTOMER);
+  if (!fileA) throw new Error("找不到客戶資料分頁");
+
+  const data = fileA.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || "").trim());
+  const phoneCol = headers.indexOf("電話");
+  const sourceCol = headers.indexOf("來源");
+  const notesCol = headers.indexOf("美容備註");
+  if (phoneCol < 0 || sourceCol < 0 || notesCol < 0) {
+    throw new Error("找不到必要欄位（電話/來源/美容備註）");
+  }
+
+  let fixed = 0;
+  for (let i = 1; i < data.length; i++) {
+    const source = String(data[i][sourceCol] || "").trim();
+    if (source !== "儲值帳本同步") continue;
+
+    const phoneRaw = String(data[i][phoneCol] || "").trim();
+    if (!phoneRaw) continue;
+
+    const phoneParts = phoneRaw.split("/").map(s => s.trim()).filter(Boolean);
+    const primary = normalizePhone(phoneParts[0] || "");
+    const extras = phoneParts.slice(1).map(p => normalizePhone(p)).filter(Boolean);
+
+    if (!primary || primary === phoneRaw) continue;  // 已是純數字格式，跳過
+
+    // 寫純數字電話 + 強制文字格式
+    const r = i + 1;  // 1-based
+    fileA.getRange(r, phoneCol + 1).setNumberFormat("@").setValue(primary);
+
+    // 雙電話：第二支 prepend 進美容備註
+    if (extras.length) {
+      const existingNotes = String(data[i][notesCol] || "").trim();
+      const extraNote = "另有電話：" + extras.join("、");
+      const merged = existingNotes
+        ? (existingNotes.indexOf(extraNote) >= 0 ? existingNotes : extraNote + "；" + existingNotes)
+        : extraNote;
+      fileA.getRange(r, notesCol + 1).setValue(merged);
+    }
+    fixed++;
+  }
+
+  Logger.log("fixSyncedPhonesFormat: 修了 " + fixed + " 列");
+  return { fixed: fixed };
+}
+
+// ============================================================
 // 工具函式
 // ============================================================
 function openCustomerFile() { return SpreadsheetApp.openByUrl(FILE_A_URL); }
