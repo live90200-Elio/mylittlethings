@@ -512,6 +512,73 @@ function pushLine(text) {
 // ============================================================
 // 測試函式（在 Apps Script 編輯器執行）
 // ============================================================
+
+/**
+ * 出事時編輯器跑一次，30 秒看出斷點。
+ * 驗：(1) 檔案 A 能讀 (2) 檔案 B 能讀 (3) LINE_TOKEN 有效（用 /v2/bot/info 不會誤推播）(4) BOSS_USER_ID 有設
+ */
+function selfCheck() {
+  const results = [];
+  const props = PropertiesService.getScriptProperties();
+
+  try {
+    const sheet = openCustomerFile().getSheetByName(SHEET_CUSTOMER);
+    if (!sheet) throw new Error("找不到分頁：" + SHEET_CUSTOMER);
+    results.push({ name: "檔案 A（" + SHEET_CUSTOMER + "）", ok: true, detail: sheet.getLastRow() + " 列" });
+  } catch (e) {
+    results.push({ name: "檔案 A（" + SHEET_CUSTOMER + "）", ok: false, detail: shortenErr_(e) });
+  }
+
+  try {
+    const sheet = openLedger().getSheetByName(SHEET_LEDGER);
+    if (!sheet) throw new Error("找不到分頁：" + SHEET_LEDGER);
+    results.push({ name: "檔案 B（" + SHEET_LEDGER + "）", ok: true, detail: sheet.getLastRow() + " 列" });
+  } catch (e) {
+    results.push({ name: "檔案 B（" + SHEET_LEDGER + "）", ok: false, detail: shortenErr_(e) });
+  }
+
+  const token = props.getProperty("LINE_TOKEN");
+  if (!token) {
+    results.push({ name: "LINE_TOKEN", ok: false, detail: "ScriptProperties 沒設" });
+  } else {
+    try {
+      const res = UrlFetchApp.fetch("https://api.line.me/v2/bot/info", {
+        method: "get",
+        headers: { Authorization: "Bearer " + token },
+        muteHttpExceptions: true
+      });
+      const code = res.getResponseCode();
+      if (code === 200) {
+        results.push({ name: "LINE_TOKEN", ok: true, detail: "HTTP 200（token 有效）" });
+      } else if (code === 401) {
+        results.push({ name: "LINE_TOKEN", ok: false, detail: "HTTP 401（token 失效或被撤，需重發）" });
+      } else {
+        results.push({ name: "LINE_TOKEN", ok: false, detail: "HTTP " + code });
+      }
+    } catch (e) {
+      results.push({ name: "LINE_TOKEN", ok: false, detail: shortenErr_(e) });
+    }
+  }
+
+  const bossId = props.getProperty("BOSS_USER_ID");
+  if (!bossId) {
+    results.push({ name: "BOSS_USER_ID", ok: false, detail: "ScriptProperties 沒設" });
+  } else {
+    results.push({ name: "BOSS_USER_ID", ok: true, detail: "已設定（" + bossId.substring(0, 5) + "...）" });
+  }
+
+  const lines = ["=== selfCheck (pet-grooming-credit-liff) ==="];
+  for (const r of results) {
+    lines.push((r.ok ? "✓ " : "✗ ") + r.name + "：" + r.detail);
+  }
+  Logger.log(lines.join("\n"));
+  return results;
+}
+
+function shortenErr_(err) {
+  return String((err && err.message) || err).substring(0, 200);
+}
+
 function testGetPlans() {
   Logger.log(getPlans().getContent());
 }

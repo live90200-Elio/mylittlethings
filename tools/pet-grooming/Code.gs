@@ -255,6 +255,56 @@ function authorizeServices() {
   });
 }
 
+/**
+ * 出事時編輯器跑一次，30 秒看出斷點。
+ * 5/3 LIFF Failed to fetch 那次要走「testReadCustomers → 看紅字」推根因，現在直接看這支報告。
+ * 驗：(1) 容器檔案 A (2) 檔案 B (3) LINE API 連通性
+ */
+function selfCheck() {
+  const results = [];
+
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    if (!sheet) throw new Error("找不到分頁：" + SHEET_NAME);
+    results.push({ name: "容器檔案 A（" + SHEET_NAME + "）", ok: true, detail: sheet.getLastRow() + " 列" });
+  } catch (e) {
+    results.push({ name: "容器檔案 A（" + SHEET_NAME + "）", ok: false, detail: shortenErr_(e) });
+  }
+
+  try {
+    const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_LEDGER);
+    if (!sheet) throw new Error("找不到分頁：" + SHEET_LEDGER);
+    results.push({ name: "檔案 B（" + SHEET_LEDGER + "）", ok: true, detail: sheet.getLastRow() + " 列" });
+  } catch (e) {
+    results.push({ name: "檔案 B（" + SHEET_LEDGER + "）", ok: false, detail: shortenErr_(e) });
+  }
+
+  try {
+    const res = UrlFetchApp.fetch("https://api.line.me/v2/profile", {
+      method: "get",
+      headers: { Authorization: "Bearer test" },
+      muteHttpExceptions: true
+    });
+    const code = res.getResponseCode();
+    // 401 是預期（test token 無效），代表網路通；非 200/401 才算可疑
+    const ok = code === 200 || code === 401;
+    results.push({ name: "LINE API 連通性", ok: ok, detail: "HTTP " + code + (ok ? "（網路通）" : "") });
+  } catch (e) {
+    results.push({ name: "LINE API 連通性", ok: false, detail: shortenErr_(e) });
+  }
+
+  const lines = ["=== selfCheck (pet-grooming) ==="];
+  for (const r of results) {
+    lines.push((r.ok ? "✓ " : "✗ ") + r.name + "：" + r.detail);
+  }
+  Logger.log(lines.join("\n"));
+  return results;
+}
+
+function shortenErr_(err) {
+  return String((err && err.message) || err).substring(0, 200);
+}
+
 function testReadCustomers() {
   Logger.log(JSON.stringify(readCustomers_(), null, 2));
 }

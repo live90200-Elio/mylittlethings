@@ -496,6 +496,8 @@ function buildGuideRows_() {
 
     // ===== 工程師：排查表 =====
     { kind: "h2", text: "🛠️ 維護工程師：症狀排查表" },
+    { kind: "rule", text: "LIFF 出事先跑該專案的 selfCheck()：pet-grooming（員工查詢）+ pet-grooming-credit-liff（客戶儲值選單）兩支都有 selfCheck，編輯器選函式 → 執行 → 看執行記錄哪項打 ✗，30 秒定位「容器試算表 / 檔案 B / LINE_TOKEN / BOSS_USER_ID」斷點。5/3 那種「Failed to fetch 推根因」流程已淘汰" },
+    { kind: "kv", a: "員工/客戶 LIFF 爆 Failed to fetch", b: "該專案編輯器跑 selfCheck → 看 ✗ 細節。檔案 B PermissionDenied = 共用清單被改（5/3 案例）；LINE_TOKEN 401 = token 失效" },
     { kind: "kv", a: "老闆完全沒收 LINE", b: "1. 還是官方帳號好友嗎？\n2. LINE_TOKEN 過期？→ Console 重發，3 個專案 ScriptProperty 重設" },
     { kind: "kv", a: "簽 LIFF 老闆沒收通知", b: "看「簽約通知 log」分頁有沒有 append。\n沒 append → doPost 改完沒重部署。\n有 append 但 status=error → 看 H 欄 errorMsg" },
     { kind: "kv", a: "16:00 預約沒推", b: "appointment-helper 觸發條件記錄查當天執行。\n失敗 → 看執行記錄。\n沒記錄 → 時區是不是 Asia/Taipei" },
