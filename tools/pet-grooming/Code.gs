@@ -8,7 +8,7 @@
  * 餘額**只看檔案 B**，檔案 A 已不再有「儲值金餘額」欄位（4/30 起棄用）。
  *
  * 客戶資料 schema（檔案 A，14 欄；header-based 解析，欄序動了也不會壞）：
- * 電話 / 姓名 / 寵物1名 / 寵物1品種 / 寵物2 / 寵物2品種 /
+ * 電話 / 姓名 / 寵物1名 / 寵物1品種 / 寵物2名 / 寵物2品種 /
  * 重要提醒 / 美容備註 / 最近到店 / 建立時間 / 來源 / 本次服務 / 本次金額 / LINE_userId
  */
 
@@ -105,7 +105,9 @@ function rowToCustomer_(row, idx, balanceMap) {
   const phone = cleanText_(getCell_(row, idx, "電話"));
   const pets = [];
   addPet_(pets, getCell_(row, idx, "寵物1名"), getCell_(row, idx, "寵物1品種"));
-  addPet_(pets, getCell_(row, idx, "寵物2"),  getCell_(row, idx, "寵物2品種"));
+  // 兼容兩種 header：「寵物2名」（檔案 A 4/30 後實際）或「寵物2」（舊版/簡寫）
+  const pet2Name = getCell_(row, idx, "寵物2名") || getCell_(row, idx, "寵物2");
+  addPet_(pets, pet2Name, getCell_(row, idx, "寵物2品種"));
 
   const phoneKey = normalizePhone_(phone);
   const balance = phoneKey && balanceMap[phoneKey] != null ? balanceMap[phoneKey] : 0;
