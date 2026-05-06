@@ -275,6 +275,10 @@
       background: linear-gradient(135deg, var(--lavender) 0%, #9575cd 100%);
       box-shadow: 0 3px 10px rgba(179,157,219,.4);
     }
+    .quick-chip[data-filter="monthly"].active {
+      background: linear-gradient(135deg, #b39ddb 0%, #7e57c2 100%);
+      box-shadow: 0 3px 10px rgba(126,87,194,.4);
+    }
 
     /* ─── List & Cards ─── */
     .list {
@@ -474,6 +478,36 @@
       overflow-wrap: anywhere;
     }
 
+    /* Monthly (包月) Badge */
+    .monthly {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 13px;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .monthly.active {
+      background: var(--lavender-light);
+      border: 1.5px solid rgba(179, 157, 219, .4);
+      color: #5e3aa3;
+    }
+    .monthly.warn {
+      background: #fff4e6;
+      border: 1.5px solid rgba(240, 165, 0, .35);
+      color: #a96b00;
+    }
+    .monthly.inactive {
+      background: #f4f4f4;
+      border: 1.5px solid #dcdcdc;
+      color: #777;
+    }
+    .monthly-icon { font-size: 17px; flex-shrink: 0; }
+    .monthly-detail { font-weight: 600; opacity: .8; font-size: 12.5px; margin-left: 4px; }
+
     /* Notes */
     .note {
       display: flex;
@@ -612,6 +646,7 @@
         <span class="quick-chip active" data-filter="all">🐾 全部</span>
         <span class="quick-chip" data-filter="alert">🚨 有提醒</span>
         <span class="quick-chip" data-filter="balance">💰 有儲值</span>
+        <span class="quick-chip" data-filter="monthly">📅 包月中</span>
         <span class="quick-chip" data-filter="zero">🪙 餘額為 0</span>
       </div>
     </section>
@@ -794,6 +829,8 @@
               </div>
             </div>
 
+            ${renderMonthlyBadge(customer.monthly)}
+
             <div class="info-grid">
               <div class="info-cell">
                 <div class="label">🐾 最近到店</div>
@@ -823,11 +860,43 @@
       `;
     }
 
+    function renderMonthlyBadge(m) {
+      if (!m) return '';
+      if (m.isActive) {
+        const warn = m.daysLeft <= 7 || m.remaining <= 1;
+        const icon = warn ? '⚠️' : '📅';
+        const cls = warn ? 'warn' : 'active';
+        return `
+          <div class="monthly ${cls}">
+            <span class="monthly-icon">${icon}</span>
+            <span>包月中｜剩 <b>${m.remaining}</b> 次｜還有 <b>${m.daysLeft}</b> 天到期
+              <span class="monthly-detail">（${escapeHtml(m.expireDate)} 前用完）</span>
+            </span>
+          </div>`;
+      }
+      if (m.isExpired) {
+        return `
+          <div class="monthly inactive">
+            <span class="monthly-icon">📅</span>
+            <span>包月已過期（${escapeHtml(m.expireDate)} 截止），用了 ${m.used}/5 次</span>
+          </div>`;
+      }
+      if (m.isUsedUp) {
+        return `
+          <div class="monthly inactive">
+            <span class="monthly-icon">📅</span>
+            <span>包月 5 次已用完<span class="monthly-detail">（${escapeHtml(m.expireDate)} 前有效）</span></span>
+          </div>`;
+      }
+      return '';
+    }
+
     function quickFilter(customer, filter) {
       const balance = Number(customer.balance || 0);
       if (filter === "alert")   return Array.isArray(customer.alerts) && customer.alerts.length > 0;
       if (filter === "balance") return balance > 0;
       if (filter === "zero")    return balance <= 0;
+      if (filter === "monthly") return customer.monthly && customer.monthly.isActive;
       return true;
     }
 
