@@ -8,6 +8,7 @@
 產出（與此 .py 同資料夾）：
     - 散客服務簽收單.xlsx       → 對應檔案 A「服務紀錄」分頁
     - 儲值客戶服務簽收單.xlsx   → 對應檔案 B「交易明細」分頁
+    - 包月客戶簽收單.xlsx       → 對應檔案 B「包月客戶」分頁
 
 設計原則：
     - 欄位順序 100% 對齊目標 Sheets（Cowork 識別後從左到右就是 row 順序）
@@ -82,6 +83,13 @@ def build_payment_options_text(compact=False):
     return "    ".join(f"☐ {x}" for x in PAYMENT_OPTIONS)
 
 
+def build_monthly_status_text(compact=False):
+    """包月本次狀態 prefill：☐ 新購包月 / ☐ 第 N 次"""
+    if compact:
+        return "☐新購  ☐第___次"
+    return "☐ 新購包月\n☐ 第 ____ 次（1~5）"
+
+
 def calc_row_height(row_count):
     """依列數動態算主體列高（pt），保證一頁印得下。"""
     return max(20, BODY_AVAILABLE_PT / row_count)
@@ -93,11 +101,12 @@ def use_compact_layout(row_count):
 
 
 def setup_sheet(ws: Worksheet, title: str, columns, sub_label: str,
-                row_count: int, prefill=None):
+                row_count: int, prefill=None, extra_note: str = ""):
     """
     columns: list of (key, header_label, width_chars)
     row_count: 主體列數（會依此自動算行高 / 切換 checkbox 緊湊模式）
     prefill: dict {key: text_to_prefill_in_each_body_row}
+    extra_note: 頁尾基本提醒之外的補充說明（例：包月規則）
     """
     prefill = prefill or {}
     body_row_height = calc_row_height(row_count)
@@ -162,13 +171,12 @@ def setup_sheet(ws: Worksheet, title: str, columns, sub_label: str,
     # 頁尾備註
     note_row = 4 + row_count
     ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=n)
-    c = ws.cell(
-        row=note_row, column=1,
-        value="※ 收班拍照傳 Cowork KEY IN ｜ 電話寫滿 10 碼開頭 0 ｜ 金額只寫純數字（例 800，不寫 NT$ / 不寫「元」） ｜ 勾選用 ✓ 或塗滿，避免畫斜線",
-    )
+    base_note = "※ 收班拍照傳 Cowork KEY IN ｜ 電話寫滿 10 碼開頭 0 ｜ 金額只寫純數字（例 800，不寫 NT$ / 不寫「元」） ｜ 勾選用 ✓ 或塗滿，避免畫斜線"
+    note_text = base_note + (f"\n※ {extra_note}" if extra_note else "")
+    c = ws.cell(row=note_row, column=1, value=note_text)
     c.font = NOTE_FONT
     c.alignment = LEFT
-    ws.row_dimensions[note_row].height = 22
+    ws.row_dimensions[note_row].height = 36 if extra_note else 22
 
     # 列印設定：A4 橫式 fit-to-page
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
@@ -255,6 +263,48 @@ def make_credit_form(row_count: int, file_suffix: str = ""):
           f"checkbox={'單行緊湊' if compact else '雙行'})")
 
 
+def make_monthly_form(row_count: int, file_suffix: str = ""):
+    """包月客戶單（對應檔案 B「包月客戶」分頁）
+
+    包月規則：45 天 / 5 次。新購填金額；扣次數金額空白、寫第幾次（1~5）。
+
+    Sheets 欄位順序：
+        A 日期 | B 電話 | C 客戶姓名 | D 寵物名 | E 服務 | F 本次狀態
+        | G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "包月客戶簽收單"
+
+    compact = use_compact_layout(row_count)
+    columns = [
+        ("no", "#", 4),
+        ("phone", "主人電話\n(10 碼開頭 0)", 16),
+        ("name", "客戶姓名", 9),
+        ("pet", "寵物名", 9),
+        ("service", "服務項目（勾選）", 22 if compact else 20),
+        ("status", "本次狀態（勾選）", 16 if compact else 14),
+        ("amount", "金額\n(NT$)", 8),
+        ("payment", "付款方式（勾選）" if compact else "付款方式\n（勾選）", 16 if compact else 14),
+        ("sign", "簽收", 11),
+        ("note", "備註", 11),
+    ]
+    prefill = {
+        "service": build_service_options_text(compact=compact),
+        "status": build_monthly_status_text(compact=compact),
+        "payment": build_payment_options_text(compact=compact),
+    }
+    extra = "包月規則：45 天 / 5 次 ｜ 新購填金額（含當次第 1 次）｜ 扣次數金額空白、寫第幾次（1~5）"
+    setup_sheet(ws, "包月客戶簽收單", columns,
+                sub_label="包月客戶 / 新購 + 次數扣抵",
+                row_count=row_count, prefill=prefill, extra_note=extra)
+
+    out = os.path.join(OUT_DIR, f"包月客戶簽收單{file_suffix}.xlsx")
+    wb.save(out)
+    print(f"OK 寫好：{out}  (列數={row_count}, 列高={calc_row_height(row_count):.1f}pt, "
+          f"checkbox={'單行緊湊' if compact else '雙行'})")
+
+
 if __name__ == "__main__":
     print(f"店名         : {SHOP_NAME}")
     print(f"服務項目選項 : {', '.join(SERVICE_OPTIONS)}（其他可手寫）")
@@ -266,12 +316,14 @@ if __name__ == "__main__":
     # 主版本（無後綴）
     make_walk_in_form(PRIMARY_ROW_COUNT, "")
     make_credit_form(PRIMARY_ROW_COUNT, "")
+    make_monthly_form(PRIMARY_ROW_COUNT, "")
 
     # 額外列數（檔名加後綴 _NN列）
     for rc in EXTRA_ROW_COUNTS:
         suffix = f"_{rc}列"
         make_walk_in_form(rc, suffix)
         make_credit_form(rc, suffix)
+        make_monthly_form(rc, suffix)
 
     print()
     print("列印建議：A4 橫式、彩色、邊界已設好、不用縮放")
