@@ -232,7 +232,7 @@ def make_credit_form(row_count: int, file_suffix: str = ""):
     """儲值客戶單（對應檔案 B「交易明細」分頁）
 
     Sheets 欄位順序：
-        A 電話 | B 客戶姓名 | C 日期 | D 儲值金額 | E 消費項目 | F 消費金額 | G 餘額 | H 簽名 | I 備註
+        A 電話 | B 寵物名 | C 日期 | D 儲值金額 | E 消費項目 | F 消費金額 | G 餘額 | H 簽名 | I 備註
     """
     wb = Workbook()
     ws = wb.active
@@ -242,7 +242,7 @@ def make_credit_form(row_count: int, file_suffix: str = ""):
     columns = [
         ("no", "#", 4),
         ("phone", "主人電話\n(10 碼開頭 0)", 17),
-        ("name", "客戶姓名", 11),
+        ("name", "寵物名", 11),
         ("service", "服務項目（勾選）", 26 if compact else 22),
         ("amount", "消費金額", 10),
         ("topup", "儲值金額\n(新增儲值才填)", 12),
@@ -269,7 +269,7 @@ def make_monthly_form(row_count: int, file_suffix: str = ""):
     包月規則：45 天 / 5 次。新購填金額；扣次數金額空白、寫第幾次（1~5）。
 
     Sheets 欄位順序：
-        A 日期 | B 電話 | C 客戶姓名 | D 寵物名 | E 服務 | F 本次狀態
+        A 日期 | B 電話 | C 寵物名 | D 服務 | E 本次狀態
         | G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註
     """
     wb = Workbook()
@@ -280,8 +280,7 @@ def make_monthly_form(row_count: int, file_suffix: str = ""):
     columns = [
         ("no", "#", 4),
         ("phone", "主人電話\n(10 碼開頭 0)", 16),
-        ("name", "客戶姓名", 9),
-        ("pet", "寵物名", 9),
+        ("pet", "寵物名", 10),
         ("service", "服務項目（勾選）", 22 if compact else 20),
         ("status", "本次狀態（勾選）", 16 if compact else 14),
         ("amount", "金額\n(NT$)", 8),
