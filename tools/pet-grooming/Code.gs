@@ -30,10 +30,10 @@ const MONTHLY_PACKAGE_USES = 5;
 const MONTHLY_DEFAULT_PRICE = 1500;
 
 const ALLOWED_LINE_USER_IDS = {
-  "Uc91d607de27558c937af89be42699678": "員工A",
-  "U5098240716740dd49287db197da9c878": "員工B",
-  "U61199309b9ff3f86b4872f1aeb147418": "員工C",
-  "Udb797fdc8b926bff6f972be748450ecb": "員工D"
+  "Uc91d607de27558c937af89be42699678": "shan🌸",
+  "U5098240716740dd49287db197da9c878": "Mr曾",
+  "U61199309b9ff3f86b4872f1aeb147418": "美月兒",
+  "Udb797fdc8b926bff6f972be748450ecb": "Jenny"
 };
 
 function doGet(e) {
