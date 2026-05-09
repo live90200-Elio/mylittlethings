@@ -18,11 +18,16 @@
  */
 
 const SHEET_NAME = "客戶資料";
+const SHEET_GUEST_LOG = "服務紀錄";  // 檔案 A 散客結單寫入目標
 
 // 檔案 B「寵物店儲值帳本」（跟 credit-liff Code.gs 同一個 URL）
 const FILE_B_URL = "https://docs.google.com/spreadsheets/d/1yK6KNkOTJyaDiZMd5RxoZIDvOngQf6zgslN-H5Q-KaA/edit";
 const SHEET_LEDGER = "交易明細";
 const SHEET_MONTHLY = "包月客戶";
+
+const MONTHLY_PACKAGE_DAYS = 45;
+const MONTHLY_PACKAGE_USES = 5;
+const MONTHLY_DEFAULT_PRICE = 1500;
 
 const ALLOWED_LINE_USER_IDS = {
   "Uc91d607de27558c937af89be42699678": "員工A",
@@ -70,6 +75,227 @@ function doGet(e) {
       message: err && err.message ? err.message : String(err)
     });
   }
+}
+
+/**
+ * 結單 API：從 LIFF 結單頁 POST 來，按 type 寫進對應分頁。
+ *
+ * 共用 payload 欄位：
+ *   action: "submit"
+ *   token:  LINE access token（白名單驗證）
+ *   type:   "guest" | "credit" | "monthly"
+ *   note:   員工備註（optional）
+ *
+ * 各 type 額外欄位：
+ *   guest:   { petName, amount, payment }            → 寫檔案 A「服務紀錄」
+ *   credit:  { phone, petName, amount }              → 寫檔案 B「交易明細」
+ *   monthly: { phone, petName, mode, amount? }       → 寫檔案 B「包月客戶」
+ *            mode: "use"（扣次數）/ "new"（新購包月）
+ *
+ * CORS 規避：前端用 Content-Type: text/plain 避開 preflight。
+ */
+function doPost(e) {
+  try {
+    const raw = e && e.postData && e.postData.contents;
+    if (!raw) return json_({ ok: false, message: "缺少 request body" });
+    const data = JSON.parse(raw);
+
+    if (data.action !== "submit") {
+      return json_({ ok: false, message: "不支援的 action" });
+    }
+
+    const profile = verifyLineAccessToken_(data.token);
+    if (!profile.userId || !ALLOWED_LINE_USER_IDS[profile.userId]) {
+      return json_({ ok: false, code: "FORBIDDEN", message: "此帳號未授權，請聯絡店長" });
+    }
+    // 公用平板：員工自己選名字（覆蓋帳號白名單對應），沒選才 fallback
+    const operatorName = cleanText_(data.operator) || ALLOWED_LINE_USER_IDS[profile.userId];
+
+    if (data.type === "guest")   return submitGuest_(data, operatorName);
+    if (data.type === "credit")  return submitCredit_(data, operatorName);
+    if (data.type === "monthly") return submitMonthly_(data, operatorName);
+    return json_({ ok: false, message: "未知 type：" + data.type });
+  } catch (err) {
+    return json_({ ok: false, message: err && err.message ? err.message : String(err) });
+  }
+}
+
+// 散客 → 檔案 A「服務紀錄」
+// schema: A 日期 | B 主人電話 | C 寵物名 | D 服務項目 | E 金額 | F 付款方式 | G 美容師 | H 備註
+function submitGuest_(data, operatorName) {
+  const petName = cleanText_(data.petName);
+  const amount = Number(data.amount);
+  if (!petName) return json_({ ok: false, message: "請填寵物名" });
+  if (!Number.isFinite(amount) || amount <= 0) return json_({ ok: false, message: "金額需為正數" });
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_GUEST_LOG);
+  if (!sheet) return json_({ ok: false, message: "找不到分頁：" + SHEET_GUEST_LOG });
+
+  const phone = normalizePhone_(data.phone || "");
+  const payment = cleanText_(data.payment) || "現金";
+  const note = cleanText_(data.note);
+  const noteWithFlag = note ? note + "（LIFF 結單）" : "（LIFF 結單）";
+
+  const row = [
+    new Date(),                         // A 日期
+    phone,                              // B 主人電話（散客通常空）
+    petName,                            // C 寵物名
+    "洗澡",                             // D 服務項目（預設值，老闆娘日後校對）
+    amount,                             // E 金額
+    payment,                            // F 付款方式
+    operatorName,                       // G 美容師
+    noteWithFlag                        // H 備註
+  ];
+  sheet.appendRow(row);
+
+  // 強制 B 電話純文字格式防 09xxx 開頭 0 被吃掉
+  if (phone) {
+    sheet.getRange(sheet.getLastRow(), 2).setNumberFormat("@").setValue(phone);
+  }
+
+  return json_({
+    ok: true,
+    message: "已記錄散客 " + petName + " " + amount + " 元",
+    summary: { petName: petName, amount: amount, payment: payment }
+  });
+}
+
+// 儲值客戶 → 檔案 B「交易明細」
+// schema: A 電話 | B 寵物名 | C 日期 | D 儲值金額 | E 消費項目 | F 消費金額 | G 餘額 | H 簽名 | I 備註
+function submitCredit_(data, operatorName) {
+  const phoneKey = normalizePhone_(data.phone);
+  const petName = cleanText_(data.petName);
+  const amount = Number(data.amount);
+  if (!phoneKey) return json_({ ok: false, message: "缺少客戶電話" });
+  if (!Number.isFinite(amount) || amount <= 0) return json_({ ok: false, message: "金額需為正數" });
+
+  const balanceMap = loadBalanceMap_();
+  const prevBalance = Number.isFinite(balanceMap[phoneKey]) ? balanceMap[phoneKey] : 0;
+  const newBalance = prevBalance - amount;
+
+  const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_LEDGER);
+  if (!sheet) return json_({ ok: false, message: "找不到分頁：" + SHEET_LEDGER });
+
+  const note = cleanText_(data.note);
+  const noteWithFlag = note ? note + "（LIFF 結單 by " + operatorName + "）" : "LIFF 結單 by " + operatorName;
+
+  const row = [
+    phoneKey,                           // A 電話
+    petName,                            // B 寵物名
+    new Date(),                         // C 日期
+    "",                                 // D 儲值金額（消費不填）
+    "洗澡",                             // E 消費項目（預設）
+    amount,                             // F 消費金額
+    newBalance,                         // G 餘額
+    "（LIFF）",                         // H 簽名（無紙本簽名標記）
+    noteWithFlag                        // I 備註
+  ];
+  sheet.appendRow(row);
+  // 強制 A 電話純文字
+  sheet.getRange(sheet.getLastRow(), 1).setNumberFormat("@").setValue(phoneKey);
+
+  return json_({
+    ok: true,
+    message: "已扣 " + amount + " 元，剩 " + newBalance + " 元",
+    summary: { petName: petName, amount: amount, prevBalance: prevBalance, newBalance: newBalance }
+  });
+}
+
+// 包月客戶 → 檔案 B「包月客戶」
+// schema: A 日期 | B 電話 | C 客戶姓名(填寵物名) | D 寵物名 | E 服務 | F 本次狀態 |
+//         G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註
+function submitMonthly_(data, operatorName) {
+  const phoneKey = normalizePhone_(data.phone);
+  const petName = cleanText_(data.petName);
+  const mode = cleanText_(data.mode);  // "use" | "new"
+  if (!phoneKey) return json_({ ok: false, message: "缺少客戶電話" });
+  if (mode !== "use" && mode !== "new") return json_({ ok: false, message: "未知模式" });
+
+  const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_MONTHLY);
+  if (!sheet) return json_({ ok: false, message: "找不到分頁：" + SHEET_MONTHLY });
+
+  const today = new Date();
+  const note = cleanText_(data.note);
+  const noteWithFlag = note ? note + "（LIFF 結單 by " + operatorName + "）" : "LIFF 結單 by " + operatorName;
+
+  let row;
+  let summary;
+  if (mode === "new") {
+    // 新購包月：H 已用 = 1（含當次）/ I 剩 = 4 / J 到期 = today + 45 天
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return json_({ ok: false, message: "新購包月需填金額" });
+    }
+    const expireDate = new Date(today.getTime() + MONTHLY_PACKAGE_DAYS * 24 * 60 * 60 * 1000);
+    row = [
+      today,                            // A 日期
+      phoneKey,                         // B 電話
+      petName,                          // C 客戶姓名（填寵物名）
+      petName,                          // D 寵物名
+      "洗澡",                           // E 服務
+      "新購",                           // F 本次狀態
+      amount,                           // G 金額
+      1,                                // H 已用次數（含當次）
+      MONTHLY_PACKAGE_USES - 1,         // I 剩餘
+      expireDate,                       // J 到期日
+      "（LIFF）",                       // K 簽名
+      noteWithFlag                      // L 備註
+    ];
+    summary = {
+      petName: petName,
+      mode: "new",
+      amount: amount,
+      used: 1,
+      remaining: MONTHLY_PACKAGE_USES - 1,
+      expireDate: Utilities.formatDate(expireDate, Session.getScriptTimeZone(), "yyyy-MM-dd")
+    };
+  } else {
+    // 扣次數：讀該客戶最近一筆狀態，已用+1 / 剩-1 / 到期日延用
+    const monthlyMap = loadMonthlyMap_();
+    const status = monthlyMap[phoneKey];
+    if (!status) return json_({ ok: false, message: "找不到包月紀錄，請改用「新購包月」" });
+    if (status.isExpired) return json_({ ok: false, message: "包月已過期，請改用「新購包月」" });
+    if (status.isUsedUp) return json_({ ok: false, message: "包月 5 次已用完，請改用「新購包月」" });
+
+    const newUsed = status.used + 1;
+    const newRemaining = MONTHLY_PACKAGE_USES - newUsed;
+    // 到期日延用上一筆（從字串轉回 Date）
+    const expireParts = status.expireDate.split("-").map(Number);
+    const expireDate = new Date(expireParts[0], expireParts[1] - 1, expireParts[2]);
+
+    row = [
+      today,
+      phoneKey,
+      petName,
+      petName,
+      "洗澡",
+      "第 " + newUsed + " 次",          // F 本次狀態
+      "",                               // G 金額（扣次數空白）
+      newUsed,
+      newRemaining,
+      expireDate,
+      "（LIFF）",
+      noteWithFlag
+    ];
+    summary = {
+      petName: petName,
+      mode: "use",
+      used: newUsed,
+      remaining: newRemaining,
+      expireDate: status.expireDate
+    };
+  }
+
+  sheet.appendRow(row);
+  sheet.getRange(sheet.getLastRow(), 2).setNumberFormat("@").setValue(phoneKey);
+
+  return json_({
+    ok: true,
+    message: mode === "new"
+      ? "已新購包月，剩 " + summary.remaining + " 次"
+      : "已扣第 " + summary.used + " 次，剩 " + summary.remaining + " 次",
+    summary: summary
+  });
 }
 
 function readCustomers_() {
@@ -352,10 +578,19 @@ function selfCheck() {
     results.push({ name: "容器檔案 A（" + SHEET_NAME + "）", ok: false, detail: shortenErr_(e) });
   }
 
+  // 5/12 起多一個結單寫入目標：服務紀錄（散客結單寫這裡）
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_GUEST_LOG);
+    if (!sheet) throw new Error("找不到分頁：" + SHEET_GUEST_LOG + "（散客結單會失敗）");
+    results.push({ name: "容器檔案 A（" + SHEET_GUEST_LOG + "）", ok: true, detail: sheet.getLastRow() + " 列｜散客結單目標" });
+  } catch (e) {
+    results.push({ name: "容器檔案 A（" + SHEET_GUEST_LOG + "）", ok: false, detail: shortenErr_(e) });
+  }
+
   try {
     const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_LEDGER);
     if (!sheet) throw new Error("找不到分頁：" + SHEET_LEDGER);
-    results.push({ name: "檔案 B（" + SHEET_LEDGER + "）", ok: true, detail: sheet.getLastRow() + " 列" });
+    results.push({ name: "檔案 B（" + SHEET_LEDGER + "）", ok: true, detail: sheet.getLastRow() + " 列｜儲值結單目標" });
   } catch (e) {
     results.push({ name: "檔案 B（" + SHEET_LEDGER + "）", ok: false, detail: shortenErr_(e) });
   }
@@ -368,7 +603,7 @@ function selfCheck() {
     } else {
       const map = loadMonthlyMap_();
       const activeCount = Object.values(map).filter((m) => m.isActive).length;
-      results.push({ name: "檔案 B（" + SHEET_MONTHLY + "）", ok: true, detail: sheet.getLastRow() + " 列｜包月中 " + activeCount + " 位" });
+      results.push({ name: "檔案 B（" + SHEET_MONTHLY + "）", ok: true, detail: sheet.getLastRow() + " 列｜包月中 " + activeCount + " 位｜結單目標" });
     }
   } catch (e) {
     results.push({ name: "檔案 B（" + SHEET_MONTHLY + "）", ok: false, detail: shortenErr_(e) });
