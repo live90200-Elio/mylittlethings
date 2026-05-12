@@ -161,9 +161,22 @@
           <input type="text" id="petBreed" placeholder="例如：馬爾濟斯">
         </div>
       </div>
+      <div class="grid2">
+        <div class="field">
+          <label>年齡</label>
+          <input type="text" id="petAge" placeholder="例如：3歲 / 8個月">
+        </div>
+        <div class="field">
+          <label>性別</label>
+          <div class="checks" id="petGender">
+            <label class="check-item"><input type="radio" name="petGender" value="公"> 公</label>
+            <label class="check-item"><input type="radio" name="petGender" value="母"> 母</label>
+          </div>
+        </div>
+      </div>
       <div class="field">
         <label>備註</label>
-        <textarea id="remark" placeholder="寵物習性、健康狀況或其他特別需求"></textarea>
+        <textarea id="remark" placeholder="範例：請特別說明特殊疾病（如心臟病、皮膚病、年邁老犬…等）"></textarea>
       </div>
     </div>
 
@@ -269,6 +282,15 @@
     cb.addEventListener("change", sync);
   });
 
+  // --- 性別 radio 勾選狀態樣式（同組只有一個 .on） ---
+  document.querySelectorAll("#petGender .check-item").forEach((el) => {
+    const rb = el.querySelector("input");
+    rb.addEventListener("change", () => {
+      document.querySelectorAll("#petGender .check-item").forEach((x) => x.classList.remove("on"));
+      if (rb.checked) el.classList.add("on");
+    });
+  });
+
   // --- 簽名 Canvas ---
   const sigWrap = $("sigWrap");
   const canvas = $("sigCanvas");
@@ -344,6 +366,9 @@
     const phone = validatePhone($("customerPhone").value);
     const petName = $("petName").value.trim();
     const breed = $("petBreed").value.trim();
+    const petAge = $("petAge").value.trim();
+    const petGenderEl = document.querySelector('input[name="petGender"]:checked');
+    const petGender = petGenderEl ? petGenderEl.value : "";
     const remark = $("remark").value.trim();
     const amount = $("amount").value.trim();
     const services = [...document.querySelectorAll("#services input:checked")].map((c) => c.value);
@@ -364,6 +389,8 @@
       phone,
       petName,
       breed,
+      petAge,
+      petGender,
       remark,
       amount,
       services,

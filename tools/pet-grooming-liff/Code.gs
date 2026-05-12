@@ -49,6 +49,8 @@ function doPost(e) {
       phone: phone,
       petName: data.petName,
       breed: data.breed || "",
+      petAge: data.petAge || "",
+      petGender: data.petGender || "",
       remark: data.remark || "",
       amount: data.amount || "",
       services: data.services || [],
@@ -125,11 +127,14 @@ function upsertCustomer(phone, data, hashPayload) {
     "姓名": data.name,
     "寵物1名": data.petName,
     "寵物1品種": data.breed || "",
+    "寵物1年齡": data.petAge || "",
+    "寵物1性別": data.petGender || "",
     "美容備註": data.remark || "",
     "建立時間": new Date(),
     "來源": "LIFF",
     "本次服務": servicesStr,
     "本次金額": data.amount || "",
+    "每次金額": data.amount || "",
     "LINE_userId": data.liffUserId || "",
   };
 
@@ -142,7 +147,7 @@ function upsertCustomer(phone, data, hashPayload) {
     // 更新：只寫有 header 對應到的欄位；姓名/寵物1名/寵物1品種/美容備註 只在原格空白時寫（不蓋老闆手填）
     const range = sheet.getRange(rowIndex, 1, 1, headers.length);
     const current = range.getValues()[0];
-    const softFields = new Set(["姓名", "寵物1名", "寵物1品種", "美容備註"]);
+    const softFields = new Set(["姓名", "寵物1名", "寵物1品種", "寵物1年齡", "寵物1性別", "美容備註"]);
     headers.forEach((h, i) => {
       if (!(h in fieldMap)) return;
       if (softFields.has(h) && current[i]) return; // 軟欄位：原本有值就不蓋
@@ -235,6 +240,7 @@ function buildContractHtml(data, hashPayload, hash) {
   <table>
     <tr><td class="label">客戶姓名</td><td>${esc(data.name)}</td><td class="label">聯絡電話</td><td>${esc(hashPayload.phone)}</td></tr>
     <tr><td class="label">寵物名</td><td>${esc(data.petName)}</td><td class="label">品種</td><td>${esc(data.breed || "")}</td></tr>
+    <tr><td class="label">年齡</td><td>${esc(data.petAge || "")}</td><td class="label">性別</td><td>${esc(data.petGender || "")}</td></tr>
     <tr><td class="label">備註</td><td colspan="3">${esc(data.remark || "").replace(/\n/g, "<br>")}</td></tr>
   </table>
 
@@ -410,6 +416,8 @@ function testDoPost() {
     phone: "0912345678",
     petName: "測試寵物",
     breed: "米克斯",
+    petAge: "3歲",
+    petGender: "公",
     remark: "測試備註",
     amount: "800",
     services: ["洗澡", "修頭"],
