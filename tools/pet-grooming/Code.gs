@@ -133,6 +133,7 @@ function submitGuest_(data, operatorName) {
 
   const phone = normalizePhone_(data.phone || "");
   const payment = cleanText_(data.payment) || "現金";
+  const service = cleanText_(data.service) || "洗澡";  // 員工 LIFF 勾的服務（複選用「、」串），舊版客戶端沒給時 fallback
   const note = cleanText_(data.note);
   const noteWithFlag = note ? note + "（LIFF 結單）" : "（LIFF 結單）";
 
@@ -140,7 +141,7 @@ function submitGuest_(data, operatorName) {
     new Date(),                         // A 日期
     phone,                              // B 主人電話（散客通常空）
     petName,                            // C 寵物名
-    "洗澡",                             // D 服務項目（預設值，老闆娘日後校對）
+    service,                            // D 服務項目
     amount,                             // E 金額
     payment,                            // F 付款方式
     operatorName,                       // G 美容師
@@ -176,6 +177,7 @@ function submitCredit_(data, operatorName) {
   const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_LEDGER);
   if (!sheet) return json_({ ok: false, message: "找不到分頁：" + SHEET_LEDGER });
 
+  const service = cleanText_(data.service) || "洗澡";  // 員工 LIFF 勾的服務（複選用「、」串），舊版客戶端沒給時 fallback
   const note = cleanText_(data.note);
   const noteWithFlag = note ? note + "（LIFF 結單 by " + operatorName + "）" : "LIFF 結單 by " + operatorName;
 
@@ -184,7 +186,7 @@ function submitCredit_(data, operatorName) {
     petName,                            // B 寵物名
     new Date(),                         // C 日期
     "",                                 // D 儲值金額（消費不填）
-    "洗澡",                             // E 消費項目（預設）
+    service,                            // E 消費項目
     amount,                             // F 消費金額
     newBalance,                         // G 餘額
     "（LIFF）",                         // H 簽名（無紙本簽名標記）
@@ -215,6 +217,7 @@ function submitMonthly_(data, operatorName) {
   if (!sheet) return json_({ ok: false, message: "找不到分頁：" + SHEET_MONTHLY });
 
   const today = new Date();
+  const service = cleanText_(data.service) || "洗澡";  // 員工 LIFF 勾的服務（複選用「、」串），舊版客戶端沒給時 fallback
   const note = cleanText_(data.note);
   const noteWithFlag = note ? note + "（LIFF 結單 by " + operatorName + "）" : "LIFF 結單 by " + operatorName;
 
@@ -232,7 +235,7 @@ function submitMonthly_(data, operatorName) {
       phoneKey,                         // B 電話
       petName,                          // C 客戶姓名（填寵物名）
       petName,                          // D 寵物名
-      "洗澡",                           // E 服務
+      service,                          // E 服務
       "新購",                           // F 本次狀態
       amount,                           // G 金額
       1,                                // H 已用次數（含當次）
@@ -268,7 +271,7 @@ function submitMonthly_(data, operatorName) {
       phoneKey,
       petName,
       petName,
-      "洗澡",
+      service,
       "第 " + newUsed + " 次",          // F 本次狀態
       "",                               // G 金額（扣次數空白）
       newUsed,

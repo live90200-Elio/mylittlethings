@@ -779,6 +779,32 @@
       box-shadow: 0 3px 10px rgba(108,186,139,.35);
     }
 
+    /* Service items (洗澡/大美容/剪指甲/...) — 複選 chips */
+    .service-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .service-chip {
+      border: 1.5px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13.5px;
+      font-weight: 700;
+      font-family: var(--font);
+      padding: 9px 13px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all .15s;
+      user-select: none;
+    }
+    .service-chip.active {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(108,186,139,.3);
+    }
+
     /* Sub-mode (扣次數/新購) for monthly */
     .submode-row {
       display: grid;
@@ -1062,6 +1088,10 @@
           <input id="guestPet" class="text-input" type="text" autocomplete="off" placeholder="例：球球">
         </div>
         <div class="field">
+          <label class="field-label">✂️ 服務項目（可複選）</label>
+          <div id="guestServices" class="service-row" data-services></div>
+        </div>
+        <div class="field">
           <label class="field-label" for="guestAmount">💵 收款金額</label>
           <input id="guestAmount" class="num-input" type="number" inputmode="numeric" placeholder="例：800">
         </div>
@@ -1088,6 +1118,10 @@
         <div id="creditSelectedWrap" class="hidden">
           <div id="creditSelected" class="selected-card"></div>
           <div class="field">
+            <label class="field-label">✂️ 服務項目（可複選）</label>
+            <div id="creditServices" class="service-row" data-services></div>
+          </div>
+          <div class="field">
             <label class="field-label" for="creditAmount">💵 本次消費金額</label>
             <input id="creditAmount" class="num-input" type="number" inputmode="numeric" placeholder="例：600">
           </div>
@@ -1110,6 +1144,10 @@
           <div class="submode-row">
             <button type="button" class="submode-btn active" data-submode="use">📅 扣次數</button>
             <button type="button" class="submode-btn" data-submode="new">➕ 新購包月</button>
+          </div>
+          <div class="field">
+            <label class="field-label">✂️ 服務項目（可複選）</label>
+            <div id="monthlyServices" class="service-row" data-services></div>
           </div>
           <div id="monthlyAmountWrap" class="field hidden">
             <label class="field-label" for="monthlyAmount">💵 包月金額（45 天 5 次）</label>
@@ -1144,6 +1182,11 @@
     // 要改名字直接改這個陣列即可，不用動其他 code
     const OPERATORS = ["Mr曾", "美月兒", "shan🌸", "Jenny"];
 
+    // 服務項目清單（散客/儲值/包月共用，複選；payload 用「、」串成字串送後端）
+    // 要加減項目直接改這個陣列即可
+    const SERVICES = ["洗澡", "大美容", "剪指甲", "皮膚調理", "拆打結", "除廢毛", "貴賓腳"];
+    const DEFAULT_SERVICES = ["洗澡"];
+
     /* ── Pet icon helper ── */
     const PET_ICONS = {
       '貓':'🐱','cat':'🐱','kitty':'🐱',
@@ -1173,6 +1216,7 @@
       checkoutMode: "guest",          // "guest" | "credit" | "monthly"
       payment: "現金",                // 散客付款方式
       operator: "",                   // 結單者名稱（員工自己選）
+      services: DEFAULT_SERVICES.slice(),  // 服務項目（複選；3 個 mode 共用，切 mode/送出後重置）
       selectedCustomer: null,         // 儲值/包月選定的客戶
       monthlySubmode: "use",          // "use" | "new"
       submitting: false
@@ -1273,6 +1317,9 @@
       // ─── 美容師選擇器（chips） ───
       renderOperatorChips();
 
+      // ─── 服務項目選擇器（chips，複選，3 panel 共用 state） ───
+      renderServiceChips();
+
       // ─── 結單 mode 切換 ───
       el.modeBtns.forEach(btn => {
         btn.addEventListener("click", () => switchMode(btn.dataset.mode));
@@ -1367,6 +1414,33 @@
             c.classList.toggle("active", c === chip);
           });
         });
+      });
+    }
+
+    // 服務項目（3 panel 共用 state.services；render 一次塞進 3 個容器，click 同步全部）
+    function renderServiceChips() {
+      const containers = Array.from(document.querySelectorAll("[data-services]"));
+      containers.forEach(c => {
+        c.innerHTML = SERVICES.map(name => `
+          <button type="button" class="service-chip" data-service="${escapeAttr(name)}">${escapeHtml(name)}</button>
+        `).join("");
+      });
+      const allChips = Array.from(document.querySelectorAll(".service-chip"));
+      allChips.forEach(chip => {
+        chip.addEventListener("click", () => {
+          const name = chip.dataset.service;
+          const idx = state.services.indexOf(name);
+          if (idx >= 0) state.services.splice(idx, 1);
+          else state.services.push(name);
+          syncServiceChipsUI();
+        });
+      });
+      syncServiceChipsUI();
+    }
+
+    function syncServiceChipsUI() {
+      Array.from(document.querySelectorAll(".service-chip")).forEach(chip => {
+        chip.classList.toggle("active", state.services.includes(chip.dataset.service));
       });
     }
 
@@ -1468,12 +1542,6 @@
                 `).join('')}
               </div>` : ''}
 
-            ${customer.notes ? `
-              <div class="note">
-                <span class="note-icon">📝</span>
-                <span>${escapeHtml(customer.notes)}</span>
-              </div>` : ''}
-
             <div class="money-row">
               <div class="money ${balanceClass}" data-icon="💰">
                 <div class="label">💳 儲值金餘額</div>
@@ -1505,6 +1573,12 @@
                 <div class="val">${escapeHtml(customer.source || "未記錄")}</div>
               </div>
             </div>
+
+            ${customer.notes ? `
+              <div class="note">
+                <span class="note-icon">📝</span>
+                <span>${escapeHtml(customer.notes)}</span>
+              </div>` : ''}
           </div>
         </article>
       `;
@@ -1752,16 +1826,20 @@
       clearHint(el.guestHint);
       const petName = el.guestPet.value.trim();
       const amount = Number(el.guestAmount.value);
+      const service = state.services.join("、");
       if (!petName) return showHint(el.guestHint, "請填寵物名", "error");
       if (!Number.isFinite(amount) || amount <= 0) return showHint(el.guestHint, "金額需為正數", "error");
+      if (!service) return showHint(el.guestHint, "請至少勾一個服務項目", "error");
 
       await postSubmit({
         type: "guest",
         petName: petName,
         amount: amount,
-        payment: state.payment
+        payment: state.payment,
+        service: service
       }, el.guestSubmit, el.guestHint, () => {
         return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
+                <div>✂️ 服務：<b>${escapeHtml(service)}</b></div>
                 <div>💵 金額：<b>${formatMoney(amount)}</b>（${escapeHtml(state.payment)}）</div>`;
       });
     }
@@ -1770,18 +1848,22 @@
       clearHint(el.creditHint);
       const c = state.selectedCustomer;
       const amount = Number(el.creditAmount.value);
+      const service = state.services.join("、");
       if (!c) return showHint(el.creditHint, "請先選客戶", "error");
       if (!Number.isFinite(amount) || amount <= 0) return showHint(el.creditHint, "金額需為正數", "error");
+      if (!service) return showHint(el.creditHint, "請至少勾一個服務項目", "error");
 
       const petName = (c.pets[0] && c.pets[0].name) || "";
       await postSubmit({
         type: "credit",
         phone: c.phone,
         petName: petName,
-        amount: amount
+        amount: amount,
+        service: service
       }, el.creditSubmit, el.creditHint, (resp) => {
         const s = resp.summary || {};
         return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
+                <div>✂️ 服務：<b>${escapeHtml(service)}</b></div>
                 <div>💵 扣 <b>${formatMoney(s.amount || amount)}</b></div>
                 <div>💰 餘額：${formatMoney(s.prevBalance)} → <b>${formatMoney(s.newBalance)}</b></div>`;
       });
@@ -1791,14 +1873,17 @@
       clearHint(el.monthlyHint);
       const c = state.selectedCustomer;
       const mode = state.monthlySubmode;
+      const service = state.services.join("、");
       if (!c) return showHint(el.monthlyHint, "請先選客戶", "error");
+      if (!service) return showHint(el.monthlyHint, "請至少勾一個服務項目", "error");
 
       const petName = (c.pets[0] && c.pets[0].name) || "";
       const payload = {
         type: "monthly",
         phone: c.phone,
         petName: petName,
-        mode: mode
+        mode: mode,
+        service: service
       };
       if (mode === "new") {
         const amount = Number(el.monthlyAmount.value);
@@ -1812,10 +1897,12 @@
         const s = resp.summary || {};
         if (mode === "new") {
           return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
+                  <div>✂️ 服務：<b>${escapeHtml(service)}</b></div>
                   <div>➕ 新購包月 <b>${formatMoney(s.amount)}</b></div>
                   <div>📅 含當次第 1 次｜剩 ${s.remaining} 次｜${escapeHtml(s.expireDate)} 到期</div>`;
         }
         return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
+                <div>✂️ 服務：<b>${escapeHtml(service)}</b></div>
                 <div>📅 第 <b>${s.used}</b> 次｜剩 <b>${s.remaining}</b> 次</div>`;
       });
     }
@@ -1887,6 +1974,9 @@
       el.monthlySearchWrap.classList.remove("hidden");
       el.monthlySelectedWrap.classList.add("hidden");
       state.selectedCustomer = null;
+      // 服務項目重置回預設「洗澡」
+      state.services = DEFAULT_SERVICES.slice();
+      syncServiceChipsUI();
     }
 
     function showHint(elt, msg, kind) {
