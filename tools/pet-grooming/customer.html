@@ -1468,6 +1468,12 @@
                 `).join('')}
               </div>` : ''}
 
+            ${customer.notes ? `
+              <div class="note">
+                <span class="note-icon">📝</span>
+                <span>${escapeHtml(customer.notes)}</span>
+              </div>` : ''}
+
             <div class="money-row">
               <div class="money ${balanceClass}" data-icon="💰">
                 <div class="label">💳 儲值金餘額</div>
@@ -1499,12 +1505,6 @@
                 <div class="val">${escapeHtml(customer.source || "未記錄")}</div>
               </div>
             </div>
-
-            ${customer.notes ? `
-              <div class="note">
-                <span class="note-icon">📝</span>
-                <span>${escapeHtml(customer.notes)}</span>
-              </div>` : ''}
           </div>
         </article>
       `;
