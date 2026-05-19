@@ -5,9 +5,9 @@
  *   1. 建一個新的試算表「檔案 B：老闆私藏報表」（可以是空的，反正主要靠 Apps Script）
  *   2. 在檔案 B 裡 → 擴充功能 → Apps Script
  *   3. 把這份 Code.gs 整個貼進去
- *   4. 改下面兩個常數（⚠️ 必改）：
- *      - FILE_A_URL：檔案 A 的完整網址
- *      - BOSS_KEY：長度 12+ 的亂碼，當密碼用
+ *   4. **改 ScriptProperty（⚠️ 必設）**：專案設定 → 指令碼屬性 → 加：
+ *      - BOSS_KEY = 你的長密碼（12+ 字元亂碼）
+ *      - 若要修改下方的 FILE_A_URL / FILE_B_URL，也在這步檢查
  *   5. 儲存 → 執行 testDoGet（第一次會彈授權，按允許）
  *   6. 部署 → 新增部署 → 網頁應用程式
  *      - 執行身分：我（老闆帳號）
@@ -17,21 +17,38 @@
  * 🔒 為什麼存取權是「任何人」但還能保密？
  *    Apps Script 用 BOSS_KEY 密碼驗證。沒帶正確 key 的請求會被拒絕。
  *    所以 Apps Script 網址本身可以公開，但 BOSS_KEY 只有老闆知道。
+ *
+ * 📜 修訂歷史
+ *   - 2026-05-20：fix 兩個 bug
+ *     1. BOSS_KEY 從 hard-coded 改成 ScriptProperty（跟其他 5 個 GAS 統一）
+ *     2. getStoredValuePool 改從檔案 B「交易明細」算（原本讀客戶資料 I 欄
+ *        但 4/30 起該欄已棄用 → 永遠回傳 0）
  */
 
-// ========== ⚠️ 必改區 ==========
-const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit"; // ← 檔案 A 網址
-const BOSS_KEY = "change-me-to-random-long-string"; // ← 老闆自訂的密碼（長亂碼）
-// ================================
+// ========== ⚠️ 必改區（這份是設定常數，不是密碼，可進 git） ==========
+const FILE_A_URL = "https://docs.google.com/spreadsheets/d/<your-file-a-id>/edit"; // ← 改成你的檔案 A 網址
+const FILE_B_URL = "https://docs.google.com/spreadsheets/d/<your-file-b-id>/edit"; // ← 改成你的檔案 B 網址（儲值帳本）
+// ====================================================================
 
-const SHEET_SERVICE = "服務紀錄";
-const SHEET_CUSTOMER = "客戶資料";
+const SHEET_SERVICE = "服務紀錄";   // 檔案 A
+const SHEET_CUSTOMER = "客戶資料";  // 檔案 A
+const SHEET_LEDGER = "交易明細";    // 檔案 B（4/30 後儲值餘額的唯一真相來源）
+
+// ============================================================
+// BOSS_KEY：從 ScriptProperty 讀取，不寫死在 code 裡
+// 設法：專案設定 → 指令碼屬性 → 加 BOSS_KEY = 你的密碼
+// ============================================================
+function getBossKey_() {
+  const k = PropertiesService.getScriptProperties().getProperty("BOSS_KEY");
+  if (!k) throw new Error("BOSS_KEY 未設定（請至 專案設定 → 指令碼屬性 加 BOSS_KEY）");
+  return k;
+}
 
 function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
 
-    if (!params.key || params.key !== BOSS_KEY) {
+    if (!params.key || params.key !== getBossKey_()) {
       return json({ error: "auth_failed", message: "密碼錯誤或未提供" });
     }
 
@@ -89,7 +106,7 @@ function doGet(e) {
       byGroomer: groupBy(filtered, "groomer"),
       byPayment: groupBy(filtered, "payment"),
       records: sortedRecords,
-      storedValuePool: getStoredValuePool(customerSheet),
+      storedValuePool: getStoredValuePool(),
       generatedAt: new Date().toISOString(),
     });
   } catch (err) {
@@ -179,11 +196,61 @@ function groupBy(records, key) {
   return Object.values(groups).sort((a, b) => b.revenue - a.revenue);
 }
 
-function getStoredValuePool(customerSheet) {
-  const values = customerSheet.getDataRange().getValues();
-  let total = 0;
-  for (let i = 1; i < values.length; i++) total += Number(values[i][8]) || 0;
-  return total;
+// ============================================================
+// getStoredValuePool — 算所有客戶儲值金加總（儲值金池）
+//
+// ⚠️ 2026-05-20 修正：原本讀客戶資料 I 欄（index 8），但 4/30 起該欄
+//    已從「儲值金餘額」改成「最近到店」（日期字串）→ Number(日期)
+//    永遠 NaN → 池子永遠 0。
+//
+// 修法：改從檔案 B「交易明細」逐列掃描，以電話為 key 取「最後一筆
+//      有餘額」當該客戶目前餘額，最後全部加總。
+//      跟其他 GAS（pet-grooming 員工查詢 / pet-grooming-credit-liff
+//      客戶儲值選單）算餘額的邏輯完全一致。
+// ============================================================
+function getStoredValuePool() {
+  try {
+    const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_LEDGER);
+    if (!sheet) return 0;
+    const data = sheet.getDataRange().getValues();
+    // 交易明細欄序：A 電話 | B 姓名 | C 日期 | D 儲值金額 | E 消費項目 | F 消費金額 | G 餘額 | H 簽名 | I 備註
+    const balanceByPhone = {};
+    for (let i = 1; i < data.length; i++) {
+      const phone = normalizePhone(data[i][0]);
+      if (!phone) continue;
+      const bal = parseAmount(data[i][6]);
+      if (bal !== null) balanceByPhone[phone] = bal; // 後筆覆蓋前筆 → 取最新
+    }
+    let total = 0;
+    for (const phone in balanceByPhone) total += balanceByPhone[phone];
+    return total;
+  } catch (err) {
+    Logger.log("getStoredValuePool failed: " + err);
+    return 0;
+  }
+}
+
+// 「0912-345-678」→「0912345678」；多電話用 / 分隔取第一支
+function normalizePhone(text) {
+  if (!text) return "";
+  const first = String(text).split(/[\/,;|]/)[0];
+  const cleaned = first.replace(/[^\d]/g, "");
+  const m = cleaned.match(/09\d{8}/);
+  if (m) return m[0];
+  return cleaned;
+}
+
+// 「5,000」→ 5000；「5,000+1,000」→ 6000；空字串 → null
+function parseAmount(s) {
+  const str = String(s == null ? "" : s).trim();
+  if (!str) return null;
+  const parts = str.split("+").map((p) => Number(p.replace(/[^\d.\-]/g, "")));
+  let sum = 0;
+  let any = false;
+  for (const p of parts) {
+    if (!isNaN(p)) { sum += p; any = true; }
+  }
+  return any ? sum : null;
 }
 
 function formatDate(v) {
@@ -203,6 +270,11 @@ function json(obj) {
 
 /** 測試用：Apps Script 編輯器選這支執行，從「執行記錄」看結果 */
 function testDoGet() {
-  const result = doGet({ parameter: { key: BOSS_KEY, period: "current_month" } });
+  const result = doGet({ parameter: { key: getBossKey_(), period: "current_month" } });
   Logger.log(result.getContent());
+}
+
+/** 單獨測儲值池：執行後在執行記錄看數字是否合理（不再是 0） */
+function testStoredValuePool() {
+  Logger.log("儲值池總額：NT$" + getStoredValuePool());
 }
