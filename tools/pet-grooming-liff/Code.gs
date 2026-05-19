@@ -4,7 +4,7 @@
  * 流程：
  *   1. doPost 接收 LIFF 前端送來的 JSON（客戶資料、簽名 Base64 PNG、時間戳、LINE userId）
  *   2. 驗證必填欄位（含 liffUserId，沒登入 LINE 的人送不進來）
- *   3. 算 payload 的 SHA-256 哈希（防竄改）
+ *   3. 算 payload 的 SHA-256 哈希(防竄改)
  *   4. Upsert「客戶資料」工作表（電話為 key，存在就更新、不存在就新增）
  *   5. 產 PDF 契約（HTML template → PDF blob）→ 存 Drive 指定資料夾
  *   6. 寫「契約紀錄」工作表（時間戳 / 電話 / 姓名 / 寵物名 / PDF 連結 / 哈希 / userId）
@@ -122,13 +122,15 @@ function upsertCustomer(phone, data, hashPayload) {
   }
 
   const servicesStr = (data.services || []).join("/");
-  const fieldMap = {
+  const petName = String(data.petName || "").trim();
+  const petBreed = data.breed || "";
+  const petAge = data.petAge || "";
+  const petGender = data.petGender || "";
+
+  // 基礎欄位（不含寵物欄位，寵物欄位下面動態決定要寫到 寵物1 還是 寵物2）
+  const baseMap = {
     "電話": phone,
     "姓名": data.name,
-    "寵物1名": data.petName,
-    "寵物1品種": data.breed || "",
-    "寵物1年齡": data.petAge || "",
-    "寵物1性別": data.petGender || "",
     "美容備註": data.remark || "",
     "建立時間": new Date(),
     "來源": "LIFF",
@@ -138,19 +140,79 @@ function upsertCustomer(phone, data, hashPayload) {
     "LINE_userId": data.liffUserId || "",
   };
 
+  // 決定這次寵物資料要寫到哪個槽（1 或 2 或 overflow）
+  // slot = 1：寫寵物1欄位；slot = 2：寫寵物2欄位；slot = 0：兩槽都滿 → 塞到美容備註
+  function pickPetSlot(currentRowOrNull) {
+    if (!currentRowOrNull) return 1; // 新列預設寫寵物1
+    const idx1 = headers.indexOf("寵物1名");
+    const idx2 = headers.indexOf("寵物2名");
+    const name1 = idx1 >= 0 ? String(currentRowOrNull[idx1] || "").trim() : "";
+    const name2 = idx2 >= 0 ? String(currentRowOrNull[idx2] || "").trim() : "";
+    if (petName && name1 && petName === name1) return 1; // 同名 → 寫回寵物1（會被 soft 擋住，等同 no-op）
+    if (petName && name2 && petName === name2) return 2;
+    if (!name1) return 1;
+    if (idx2 >= 0 && !name2) return 2;
+    return 0; // overflow
+  }
+
+  function buildPetFields(slot) {
+    if (slot === 1) {
+      return {
+        "寵物1名": petName,
+        "寵物1品種": petBreed,
+        "寵物1年齡": petAge,
+        "寵物1性別": petGender,
+      };
+    }
+    if (slot === 2) {
+      return {
+        "寵物2名": petName,
+        "寵物2品種": petBreed,
+        "寵物2年齡": petAge,
+        "寵物2性別": petGender,
+      };
+    }
+    return {};
+  }
+
   if (rowIndex === -1) {
-    // 新增一列
+    // 新增一列 — 寵物固定寫到槽 1
+    const fieldMap = Object.assign({}, baseMap, buildPetFields(1));
     const newRow = headers.map((h) => (h in fieldMap ? fieldMap[h] : ""));
     sheet.appendRow(newRow);
     rowIndex = sheet.getLastRow();
   } else {
-    // 更新：只寫有 header 對應到的欄位；姓名/寵物1名/寵物1品種/美容備註 只在原格空白時寫（不蓋老闆手填）
+    // 更新：先讀現有列決定寵物寫到哪個槽
     const range = sheet.getRange(rowIndex, 1, 1, headers.length);
     const current = range.getValues()[0];
-    const softFields = new Set(["姓名", "寵物1名", "寵物1品種", "寵物1年齡", "寵物1性別", "美容備註"]);
+    const slot = pickPetSlot(current);
+    const petFields = buildPetFields(slot);
+    const fieldMap = Object.assign({}, baseMap, petFields);
+
+    // 軟欄位：原本有值就不蓋（保留老闆手填）
+    const softFields = new Set([
+      "姓名",
+      "寵物1名", "寵物1品種", "寵物1年齡", "寵物1性別",
+      "寵物2名", "寵物2品種", "寵物2年齡", "寵物2性別",
+      "美容備註",
+    ]);
+
+    // overflow：兩個寵物槽都滿，把新寵物附加到「美容備註」（不蓋寫，用 append）
+    if (slot === 0) {
+      const remarkIdx = headers.indexOf("美容備註");
+      if (remarkIdx >= 0) {
+        const overflowLine = `[新寵物] ${petName}/${petBreed}/${petAge}/${petGender}（${new Date().toLocaleDateString("zh-TW")}）`;
+        const old = String(current[remarkIdx] || "");
+        current[remarkIdx] = old ? (old + "\n" + overflowLine) : overflowLine;
+        Logger.log("[upsertCustomer] overflow：" + phone + " 已有兩寵物，新寵物寫進美容備註：" + petName);
+      }
+    }
+
     headers.forEach((h, i) => {
       if (!(h in fieldMap)) return;
-      if (softFields.has(h) && current[i]) return; // 軟欄位：原本有值就不蓋
+      if (softFields.has(h) && current[i]) return;
+      // 美容備註特例：如果 slot===0 上面已經塞了 overflow，跳過 baseMap 的 remark 覆寫
+      if (slot === 0 && h === "美容備註") return;
       current[i] = fieldMap[h];
     });
     range.setValues([current]);
