@@ -14,3 +14,7 @@ credentials.*
 # Node.js
 node_modules/
 package-lock.json
+
+# 客戶個資：真實客戶資料一律不進 repo（repo 是公開的！）
+# 儲值帳本匯出的 CSV 含真實姓名電話，只能放 repo 外（如 Mylittlethings_個資備份/）
+tools/pet-grooming-credit-liff/*.csv

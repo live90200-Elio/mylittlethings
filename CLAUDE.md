@@ -22,8 +22,10 @@
 - **寵美客戶儲值選單 LIFF**（`tools/pet-grooming-credit-liff/`）— 客戶在 LINE 內看自己儲值餘額 + 最近 5 筆紀錄、瀏覽 3 個優惠方案、按按鈕申請儲值（自動推老闆 LINE）。資料源是新建的「寵物店儲值帳本」Sheets
 - **寵美自動化維運**（`tools/pet-grooming-ops/`）— Apps Script Trigger 跑每日營收報表（Email + LINE 摘要）+ 健康監控（多 URL 各自 2 小時冷卻）+ setupGuideSheet 自動建檔案 A 「使用教學」分頁
 - **使用教學主檔**（`tools/使用教學.md`）— 客戶/老闆/員工/維護工程師 四對象一站式說明，與 setupGuideSheet 內容同步
+- **簽收單產生器**（`tools/pet-grooming-receipt-form/`）— Python 產三種紙本簽收單 xlsx（散客/儲值/包月）+ KEY_IN_RULES 鍵入規則
 
 ## 工作注意事項
 - 學生資料一律去識別化（只用座號 + 班級代號）
+- **客戶個資（真實姓名/電話/消費紀錄）絕不 commit**——repo 是公開的；文件和程式註解的範例電話一律用 0912-345-678。資料匯出檔放 `Mylittlethings_個資備份/`（repo 外）。2026/6/11 曾因 CSV 個資外洩做過一次 git 歷史改寫
 - commit 訊息要寫清楚做了什麼 + 為什麼
 - 收工前說「收工」讓 Claude 同步三方
