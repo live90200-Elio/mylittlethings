@@ -753,6 +753,26 @@
       box-shadow: 0 0 0 3px rgba(108,186,139,.18);
     }
     .num-input { font-variant-numeric: tabular-nums; }
+    .note-input {
+      width: 100%;
+      min-height: 72px;
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      background: var(--bg2);
+      color: var(--text);
+      font-size: 16px;
+      font-family: var(--font);
+      font-weight: 500;
+      outline: none;
+      resize: vertical;
+      transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+    .note-input:focus {
+      border-color: var(--primary);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(108,186,139,.18);
+    }
 
     /* Payment selector (現金/匯款/LINE Pay) */
     .pay-row {
@@ -1103,6 +1123,11 @@
             <button type="button" class="pay-btn" data-pay="LINE Pay">LINE Pay</button>
           </div>
         </div>
+        <div class="field">
+          <label class="field-label" for="guestNote">📝 備註（選填）</label>
+          <textarea id="guestNote" class="note-input" rows="2"
+            placeholder="例：耳朵紅腫已提醒主人 / 下次建議剪短一點"></textarea>
+        </div>
         <button id="guestSubmit" type="button" class="submit-btn">✓ 送出</button>
         <div id="guestHint"></div>
       </div>
@@ -1124,6 +1149,11 @@
           <div class="field">
             <label class="field-label" for="creditAmount">💵 本次消費金額</label>
             <input id="creditAmount" class="num-input" type="number" inputmode="numeric" placeholder="例：600">
+          </div>
+          <div class="field">
+            <label class="field-label" for="creditNote">📝 備註（選填）</label>
+            <textarea id="creditNote" class="note-input" rows="2"
+              placeholder="例：耳朵紅腫已提醒主人 / 下次建議剪短一點"></textarea>
           </div>
           <div id="creditPreview" class="preview" style="display:none"></div>
           <button id="creditSubmit" type="button" class="submit-btn">✓ 送出</button>
@@ -1155,6 +1185,11 @@
             <label class="field-label" for="monthlyAmount" id="monthlyAmountLabel">💵 包月金額（45 天 5 次）</label>
             <input id="monthlyAmount" class="num-input" type="number" inputmode="numeric" value="1500">
           </div>
+          <div class="field">
+            <label class="field-label" for="monthlyNote">📝 備註（選填）</label>
+            <textarea id="monthlyNote" class="note-input" rows="2"
+              placeholder="例：耳朵紅腫已提醒主人 / 下次建議剪短一點"></textarea>
+          </div>
           <div id="monthlyPreview" class="preview" style="display:none"></div>
           <button id="monthlySubmit" type="button" class="submit-btn">✓ 送出</button>
         </div>
@@ -1179,6 +1214,8 @@
   <script>
     const LIFF_ID = "2009523185-49rQ33n5";
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby99prBN40uYrIQhquDPMoTepPaJ5kNX-IHPSOACBM5Ebi0vlsZ4dxk3x44yUlfwFoa/exec";
+    // 讀客戶資料改走 POST（token 不進 URL）。需 GAS doPost 支援 action="customers" 後才能開。
+    const CUSTOMERS_VIA_POST = false;
 
     // 美容師清單（公用平板用：自己選名字後寫進 Sheets「美容師」欄 / 結單備註）
     // 要改名字直接改這個陣列即可，不用動其他 code
@@ -1186,7 +1223,7 @@
 
     // 服務項目清單（散客/儲值/包月共用，複選；payload 用「、」串成字串送後端）
     // 要加減項目直接改這個陣列即可
-    const SERVICES = ["洗澡", "大美容", "剪指甲", "皮膚調理", "拆打結", "除廢毛", "貴賓腳"];
+    const SERVICES = ["洗澡", "大美容", "剪指甲", "皮膚調理", "拆打結", "除廢毛", "貴賓腳", "其他"];
     const DEFAULT_SERVICES = ["洗澡"];
 
     /* ── Pet icon helper ── */
@@ -1259,6 +1296,7 @@
       guestForm:    document.getElementById("guestForm"),
       guestPet:     document.getElementById("guestPet"),
       guestAmount:  document.getElementById("guestAmount"),
+      guestNote:    document.getElementById("guestNote"),
       guestSubmit:  document.getElementById("guestSubmit"),
       guestHint:    document.getElementById("guestHint"),
       payBtns:      Array.from(document.querySelectorAll(".pay-btn")),
@@ -1270,6 +1308,7 @@
       creditSelectedWrap:document.getElementById("creditSelectedWrap"),
       creditSelected:    document.getElementById("creditSelected"),
       creditAmount:      document.getElementById("creditAmount"),
+      creditNote:        document.getElementById("creditNote"),
       creditPreview:     document.getElementById("creditPreview"),
       creditSubmit:      document.getElementById("creditSubmit"),
       creditHint:        document.getElementById("creditHint"),
@@ -1284,6 +1323,7 @@
       monthlyAmountWrap:  document.getElementById("monthlyAmountWrap"),
       monthlyAmountLabel: document.getElementById("monthlyAmountLabel"),
       monthlyAmount:      document.getElementById("monthlyAmount"),
+      monthlyNote:        document.getElementById("monthlyNote"),
       monthlyPreview:     document.getElementById("monthlyPreview"),
       monthlySubmit:      document.getElementById("monthlySubmit"),
       monthlyHint:        document.getElementById("monthlyHint"),
@@ -1480,13 +1520,29 @@
       el.refresh.disabled = true;
       showStatus("🐾", "讀取資料中", "正在從 Google Sheets 取得最新客戶資料。");
       try {
-        const url = new URL(APPS_SCRIPT_URL);
-        url.searchParams.set("action", "customers");
-        url.searchParams.set("token", state.accessToken);
-        const res = await fetch(url.toString(), { redirect: "follow" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const payload = await res.json();
-        if (!payload.ok) throw new Error(payload.message || "讀取失敗");
+        // CUSTOMERS_VIA_POST=true 時改用 POST 讀客戶資料（token 不進 URL、不留伺服器 log）。
+        // 前提：GAS doPost 要先加 action==="customers" 分支（回傳格式同 doGet），
+        // 並對未知 action 回 ok:false，不可預設當成結單寫入。後端部署好再把旗標改 true。
+        let payload;
+        if (CUSTOMERS_VIA_POST) {
+          const res = await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },  // 避 CORS preflight
+            body: JSON.stringify({ action: "customers", token: state.accessToken }),
+            redirect: "follow"
+          });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          payload = await res.json();
+          if (!payload.ok) throw new Error(payload.message || "讀取失敗");
+        } else {
+          const url = new URL(APPS_SCRIPT_URL);
+          url.searchParams.set("action", "customers");
+          url.searchParams.set("token", state.accessToken);
+          const res = await fetch(url.toString(), { redirect: "follow" });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          payload = await res.json();
+          if (!payload.ok) throw new Error(payload.message || "讀取失敗");
+        }
         state.customers = Array.isArray(payload.customers) ? payload.customers : [];
         state.cardTypes = Array.isArray(payload.cardTypes) && payload.cardTypes.length
           ? payload.cardTypes
@@ -1698,9 +1754,14 @@
       const pool = state.customers.filter(c => {
         const inPet = (c.pets || []).some(p => normalize(p.name).includes(norm));
         const phone = String(c.phone || "");
-        const phoneMatch = phone.replace(/\D/g, "").endsWith(norm.replace(/\D/g, ""));
+        // 修：原本用 norm.length>=3 判斷做不做電話比對；norm 裡無數字時
+        // norm.replace(/\D/g,'') 為空，endsWith('') 對所有電話都 true → pool
+        // 變全表，slice(0,6) 後正解被擠掉（例：搜「MINI」找不到 Mini cooper）。
+        // 改用「輸入裡的數字字數」當門檻。
+        const queryDigits = norm.replace(/\D/g, "");
+        const phoneMatch = queryDigits.length >= 3 && phone.replace(/\D/g, "").endsWith(queryDigits);
         const nameMatch = normalize(c.name || "").includes(norm);
-        return inPet || (norm.length >= 3 && phoneMatch) || nameMatch;
+        return inPet || phoneMatch || nameMatch;
       });
 
       // 排序：mode 對應的優先 → 一般
@@ -1721,7 +1782,7 @@
       }
 
       target.innerHTML = top.map(c => {
-        const petName = (c.pets[0] && c.pets[0].name) || "未填寵物名";
+        const petName = ((c.pets || [])[0] && c.pets[0].name) || "未填寵物名";
         const balance = Number(c.balance || 0);
         let tag = "";
         if (mode === "credit" && balance > 0) {
@@ -1729,8 +1790,9 @@
         } else if (mode === "monthly" && c.monthly && c.monthly.isActive) {
           tag = `<span class="sri-tag monthly">剩 ${c.monthly.remaining} 次</span>`;
         }
+        // 用 state.customers 的 index 當 key——電話可能重複或空白，find by phone 會選錯人
         return `
-          <div class="search-result-item" data-phone="${escapeAttr(c.phone)}">
+          <div class="search-result-item" data-idx="${state.customers.indexOf(c)}">
             <div class="sri-name">🐾 ${escapeHtml(petName)}${tag}</div>
             <div class="sri-meta">${escapeHtml(c.name || "—")}　${escapeHtml(c.phone || "")}</div>
           </div>
@@ -1739,8 +1801,7 @@
 
       target.querySelectorAll(".search-result-item").forEach(item => {
         item.addEventListener("click", () => {
-          const phone = item.dataset.phone;
-          const customer = state.customers.find(c => String(c.phone) === phone);
+          const customer = state.customers[Number(item.dataset.idx)];
           if (customer) selectCustomer(mode, customer);
         });
       });
@@ -1748,7 +1809,7 @@
 
     function selectCustomer(mode, customer) {
       state.selectedCustomer = customer;
-      const petName = (customer.pets[0] && customer.pets[0].name) || "（未填寵物名）";
+      const petName = ((customer.pets || [])[0] && customer.pets[0].name) || "（未填寵物名）";
       if (mode === "credit") {
         el.creditSearchWrap.classList.add("hidden");
         el.creditSelectedWrap.classList.remove("hidden");
@@ -1795,7 +1856,7 @@
     function refreshMonthlySelected() {
       const customer = state.selectedCustomer;
       if (!customer) return;
-      const petName = (customer.pets[0] && customer.pets[0].name) || "未填寵物";
+      const petName = ((customer.pets || [])[0] && customer.pets[0].name) || "未填寵物";
       const card = currentCard();
       const m = cardStatusOf(customer, card.name);
       const label = escapeHtml(card.name);
@@ -1894,12 +1955,14 @@
       if (!Number.isFinite(amount) || amount <= 0) return showHint(el.guestHint, "金額需為正數", "error");
       if (!service) return showHint(el.guestHint, "請至少勾一個服務項目", "error");
 
+      const note = el.guestNote.value.trim();
       await postSubmit({
         type: "guest",
         petName: petName,
         amount: amount,
         payment: state.payment,
-        service: service
+        service: service,
+        note: note
       }, el.guestSubmit, el.guestHint, () => {
         return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
                 <div>✂️ 服務：<b>${escapeHtml(service)}</b></div>
@@ -1916,13 +1979,15 @@
       if (!Number.isFinite(amount) || amount <= 0) return showHint(el.creditHint, "金額需為正數", "error");
       if (!service) return showHint(el.creditHint, "請至少勾一個服務項目", "error");
 
-      const petName = (c.pets[0] && c.pets[0].name) || "";
+      const petName = ((c.pets || [])[0] && c.pets[0].name) || "";
+      const note = el.creditNote.value.trim();
       await postSubmit({
         type: "credit",
         phone: c.phone,
         petName: petName,
         amount: amount,
-        service: service
+        service: service,
+        note: note
       }, el.creditSubmit, el.creditHint, (resp) => {
         const s = resp.summary || {};
         return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
@@ -1940,7 +2005,8 @@
       if (!c) return showHint(el.monthlyHint, "請先選客戶", "error");
       if (!service) return showHint(el.monthlyHint, "請至少勾一個服務項目", "error");
 
-      const petName = (c.pets[0] && c.pets[0].name) || "";
+      const petName = ((c.pets || [])[0] && c.pets[0].name) || "";
+      const note = el.monthlyNote.value.trim();
       const card = currentCard();
       const payload = {
         type: "monthly",
@@ -1948,6 +2014,7 @@
         petName: petName,
         mode: mode,
         service: service,
+        note: note,
         cardType: card.name
       };
       if (mode === "new") {
@@ -2025,10 +2092,12 @@
       // 散客
       el.guestPet.value = "";
       el.guestAmount.value = "";
+      el.guestNote.value = "";
       // 儲值
       el.creditSearch.value = "";
       el.creditResults.innerHTML = "";
       el.creditAmount.value = "";
+      el.creditNote.value = "";
       el.creditPreview.style.display = "none";
       el.creditSearchWrap.classList.remove("hidden");
       el.creditSelectedWrap.classList.add("hidden");
@@ -2036,6 +2105,7 @@
       el.monthlySearch.value = "";
       el.monthlyResults.innerHTML = "";
       el.monthlyAmount.value = String(currentCard().price || "");
+      el.monthlyNote.value = "";
       el.monthlyPreview.style.display = "none";
       el.monthlySearchWrap.classList.remove("hidden");
       el.monthlySelectedWrap.classList.add("hidden");
