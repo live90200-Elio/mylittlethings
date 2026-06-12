@@ -12,9 +12,13 @@
  * 電話 / 姓名 / 寵物1名 / 寵物1品種 / 寵物2名 / 寵物2品種 /
  * 重要提醒 / 美容備註 / 最近到店 / 建立時間 / 來源 / 本次服務 / 本次金額 / LINE_userId
  *
- * 包月分頁 schema（檔案 B，12 欄；位置解析，header 不能亂改）：
+ * 包月分頁 schema（檔案 B，13 欄；位置解析，header 不能亂改）：
  * A 日期 | B 電話 | C 客戶姓名 | D 寵物名 | E 服務 | F 本次狀態 |
- * G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註
+ * G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註 | M 卡別
+ * （M 空白 = 預設卡，相容加欄前的舊資料）
+ *
+ * 卡別設定分頁 schema（檔案 B，選用；沒有此分頁 = 單一洗澡卡模式）：
+ * A 卡名 | B 價格 | C 含次數 | D 期限天數 | E 適用服務 | F 顯示順序 | G 啟用
  */
 
 const SHEET_NAME = "客戶資料";
@@ -24,10 +28,13 @@ const SHEET_GUEST_LOG = "服務紀錄";  // 檔案 A 散客結單寫入目標
 const FILE_B_URL = "https://docs.google.com/spreadsheets/d/1yK6KNkOTJyaDiZMd5RxoZIDvOngQf6zgslN-H5Q-KaA/edit";
 const SHEET_LEDGER = "交易明細";
 const SHEET_MONTHLY = "包月客戶";
+const SHEET_CARD_TYPES = "卡別設定";  // 選用分頁：多卡別（洗澡卡/剪毛卡…）；不存在則退回下面的單卡常數
 
+// 「卡別設定」分頁不存在時的預設卡參數（向後相容：單卡店家不用動任何東西）
 const MONTHLY_PACKAGE_DAYS = 45;
 const MONTHLY_PACKAGE_USES = 5;
 const MONTHLY_DEFAULT_PRICE = 1500;
+const DEFAULT_CARD_NAME = "洗澡卡";
 
 const ALLOWED_LINE_USER_IDS = {
   "Uc91d607de27558c937af89be42699678": "shan🌸",
@@ -67,6 +74,7 @@ function doGet(e) {
         displayName: profile.displayName || ""
       },
       customers: readCustomers_(),
+      cardTypes: loadCardTypes_(),
       updatedAt: new Date().toISOString()
     });
   } catch (err) {
@@ -89,8 +97,9 @@ function doGet(e) {
  * 各 type 額外欄位：
  *   guest:   { petName, amount, payment }            → 寫檔案 A「服務紀錄」
  *   credit:  { phone, petName, amount }              → 寫檔案 B「交易明細」
- *   monthly: { phone, petName, mode, amount? }       → 寫檔案 B「包月客戶」
+ *   monthly: { phone, petName, mode, amount?, cardType? } → 寫檔案 B「包月客戶」
  *            mode: "use"（扣次數）/ "new"（新購包月）
+ *            cardType: 卡名（對應「卡別設定」分頁；舊前端沒給 = 預設卡）
  *
  * CORS 規避：前端用 Content-Type: text/plain 避開 preflight。
  */
@@ -205,13 +214,19 @@ function submitCredit_(data, operatorName) {
 
 // 包月客戶 → 檔案 B「包月客戶」
 // schema: A 日期 | B 電話 | C 客戶姓名(填寵物名) | D 寵物名 | E 服務 | F 本次狀態 |
-//         G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註
+//         G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註 | M 卡別
 function submitMonthly_(data, operatorName) {
   const phoneKey = normalizePhone_(data.phone);
   const petName = cleanText_(data.petName);
   const mode = cleanText_(data.mode);  // "use" | "new"
   if (!phoneKey) return json_({ ok: false, message: "缺少客戶電話" });
   if (mode !== "use" && mode !== "new") return json_({ ok: false, message: "未知模式" });
+
+  const cards = loadCardTypes_();
+  const card = findCardType_(cards, data.cardType);
+  if (!card) {
+    return json_({ ok: false, message: "未知卡別：" + cleanText_(data.cardType) + "（請檢查「" + SHEET_CARD_TYPES + "」分頁）" });
+  }
 
   const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_MONTHLY);
   if (!sheet) return json_({ ok: false, message: "找不到分頁：" + SHEET_MONTHLY });
@@ -224,12 +239,12 @@ function submitMonthly_(data, operatorName) {
   let row;
   let summary;
   if (mode === "new") {
-    // 新購包月：H 已用 = 1（含當次）/ I 剩 = 4 / J 到期 = today + 45 天
+    // 新購：H 已用 = 1（含當次）/ I 剩 = 卡含次數 - 1 / J 到期 = today + 卡期限天數
     const amount = Number(data.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return json_({ ok: false, message: "新購包月需填金額" });
+      return json_({ ok: false, message: "新購需填金額" });
     }
-    const expireDate = new Date(today.getTime() + MONTHLY_PACKAGE_DAYS * 24 * 60 * 60 * 1000);
+    const expireDate = new Date(today.getTime() + card.days * 24 * 60 * 60 * 1000);
     row = [
       today,                            // A 日期
       phoneKey,                         // B 電話
@@ -239,29 +254,32 @@ function submitMonthly_(data, operatorName) {
       "新購",                           // F 本次狀態
       amount,                           // G 金額
       1,                                // H 已用次數（含當次）
-      MONTHLY_PACKAGE_USES - 1,         // I 剩餘
+      card.uses - 1,                    // I 剩餘
       expireDate,                       // J 到期日
       "（LIFF）",                       // K 簽名
-      noteWithFlag                      // L 備註
+      noteWithFlag,                     // L 備註
+      card.name                         // M 卡別
     ];
     summary = {
       petName: petName,
       mode: "new",
+      cardName: card.name,
       amount: amount,
       used: 1,
-      remaining: MONTHLY_PACKAGE_USES - 1,
+      remaining: card.uses - 1,
       expireDate: Utilities.formatDate(expireDate, Session.getScriptTimeZone(), "yyyy-MM-dd")
     };
   } else {
-    // 扣次數：讀該客戶最近一筆狀態，已用+1 / 剩-1 / 到期日延用
+    // 扣次數：讀該客戶「該卡別」最近一筆狀態，已用+1 / 剩-1 / 到期日延用
     const monthlyMap = loadMonthlyMap_();
-    const status = monthlyMap[phoneKey];
-    if (!status) return json_({ ok: false, message: "找不到包月紀錄，請改用「新購包月」" });
-    if (status.isExpired) return json_({ ok: false, message: "包月已過期，請改用「新購包月」" });
-    if (status.isUsedUp) return json_({ ok: false, message: "包月 5 次已用完，請改用「新購包月」" });
+    const holder = monthlyMap[phoneKey];
+    const status = holder && holder.cards ? holder.cards[card.name] : null;
+    if (!status) return json_({ ok: false, message: "找不到「" + card.name + "」紀錄，請改用「新購」" });
+    if (status.isExpired) return json_({ ok: false, message: "「" + card.name + "」已過期，請改用「新購」" });
+    if (status.isUsedUp) return json_({ ok: false, message: "「" + card.name + "」次數已用完，請改用「新購」" });
 
     const newUsed = status.used + 1;
-    const newRemaining = MONTHLY_PACKAGE_USES - newUsed;
+    const newRemaining = status.remaining - 1;  // 以上一筆剩餘為準（各卡別總次數不同，不可用全域常數回推）
     // 到期日延用上一筆（從字串轉回 Date）
     const expireParts = status.expireDate.split("-").map(Number);
     const expireDate = new Date(expireParts[0], expireParts[1] - 1, expireParts[2]);
@@ -278,11 +296,13 @@ function submitMonthly_(data, operatorName) {
       newRemaining,
       expireDate,
       "（LIFF）",
-      noteWithFlag
+      noteWithFlag,
+      card.name                         // M 卡別
     ];
     summary = {
       petName: petName,
       mode: "use",
+      cardName: card.name,
       used: newUsed,
       remaining: newRemaining,
       expireDate: status.expireDate
@@ -295,8 +315,8 @@ function submitMonthly_(data, operatorName) {
   return json_({
     ok: true,
     message: mode === "new"
-      ? "已新購包月，剩 " + summary.remaining + " 次"
-      : "已扣第 " + summary.used + " 次，剩 " + summary.remaining + " 次",
+      ? "已新購「" + card.name + "」，剩 " + summary.remaining + " 次"
+      : "「" + card.name + "」已扣第 " + summary.used + " 次，剩 " + summary.remaining + " 次",
     summary: summary
   });
 }
@@ -387,8 +407,9 @@ function loadBalanceMap_() {
   }
 }
 
-// 從檔案 B「包月客戶」算每位客戶包月狀態（取該客戶最新一筆當當前狀態）
-// 回傳: { phoneKey: { used, remaining, daysLeft, expireDate, isActive, isExpired, isUsedUp, petName } }
+// 從檔案 B「包月客戶」算每位客戶「各卡別」的包月狀態（每張卡取最新一筆）
+// 回傳: { phoneKey: { cards: { 卡名: status }, ...代表卡狀態攤平在頂層（向後相容單卡前端） } }
+// status = { cardName, used, remaining, daysLeft, expireDate, isActive, isExpired, isUsedUp, petName }
 function loadMonthlyMap_() {
   try {
     const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_MONTHLY);
@@ -396,16 +417,21 @@ function loadMonthlyMap_() {
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return {};
 
-    // 包月分頁欄序：A 日期 | B 電話 | C 客戶姓名 | D 寵物名 | E 服務 | F 本次狀態 | G 金額 | H 已用次數 | I 剩餘 | J 到期日 | K 簽名 | L 備註
-    // 紙本可能不依日期順序貼進來，所以掃全表找每位客戶最新一筆
+    const cards = loadCardTypes_();
+    const defaultCardName = cards.length ? cards[0].name : DEFAULT_CARD_NAME;
+
+    // 包月分頁欄序：A 日期 | B 電話 | ... | L 備註 | M 卡別（M 空白 = 預設卡，舊資料相容）
+    // 紙本可能不依日期順序貼進來，所以掃全表找每位客戶「每張卡」最新一筆
     const latest = {};
     for (let i = 1; i < data.length; i++) {
       const phoneKey = normalizePhone_(data[i][1]);
       if (!phoneKey) continue;
       const date = parseDate_(data[i][0]);
       if (!date) continue;
-      if (!latest[phoneKey] || date.getTime() > latest[phoneKey].date.getTime()) {
-        latest[phoneKey] = { date: date, row: data[i] };
+      const cardName = cleanText_(data[i][12]) || defaultCardName;
+      const key = phoneKey + "||" + cardName;
+      if (!latest[key] || date.getTime() > latest[key].date.getTime()) {
+        latest[key] = { phoneKey: phoneKey, cardName: cardName, date: date, row: data[i] };
       }
     }
 
@@ -415,8 +441,9 @@ function loadMonthlyMap_() {
     const tz = Session.getScriptTimeZone();
 
     const map = {};
-    for (const phoneKey in latest) {
-      const row = latest[phoneKey].row;
+    for (const key in latest) {
+      const item = latest[key];
+      const row = item.row;
       const used = Number(row[7]);
       const remaining = Number(row[8]);
       const expireDate = parseDate_(row[9]);
@@ -429,10 +456,11 @@ function loadMonthlyMap_() {
       expireMidnight.setHours(0, 0, 0, 0);
       const daysLeft = Math.round((expireMidnight.getTime() - today.getTime()) / msPerDay);
       const isExpired = daysLeft < 0;
-      const isUsedUp = used >= 5 || remaining <= 0;
+      const isUsedUp = remaining <= 0;  // 各卡別總次數不同，不可寫死 used >= 5
       const isActive = !isExpired && !isUsedUp;
 
-      map[phoneKey] = {
+      const status = {
+        cardName: item.cardName,
         used: used,
         remaining: remaining,
         daysLeft: daysLeft,
@@ -442,12 +470,81 @@ function loadMonthlyMap_() {
         isUsedUp: isUsedUp,
         petName: petName
       };
+      if (!map[item.phoneKey]) map[item.phoneKey] = { cards: {} };
+      map[item.phoneKey].cards[item.cardName] = status;
+    }
+
+    // 挑一張「代表卡」攤平到頂層：優先有效卡，其次到期日最晚（舊前端/單卡店家讀頂層即可）
+    for (const phoneKey in map) {
+      const cardMap = map[phoneKey].cards;
+      let best = null;
+      for (const cn in cardMap) {
+        const s = cardMap[cn];
+        if (!best ||
+            (s.isActive && !best.isActive) ||
+            (s.isActive === best.isActive && s.expireDate > best.expireDate)) {
+          best = s;
+        }
+      }
+      if (best) {
+        for (const k in best) map[phoneKey][k] = best[k];
+      }
     }
     return map;
   } catch (err) {
     Logger.log("loadMonthlyMap_ failed: " + err);
     return {};
   }
+}
+
+// 讀檔案 B「卡別設定」分頁；分頁不存在或無有效列 → 回傳預設單一洗澡卡（向後相容）
+// 欄序：A 卡名 | B 價格 | C 含次數 | D 期限天數 | E 適用服務 | F 顯示順序 | G 啟用
+function loadCardTypes_() {
+  const fallback = [{
+    name: DEFAULT_CARD_NAME,
+    price: MONTHLY_DEFAULT_PRICE,
+    uses: MONTHLY_PACKAGE_USES,
+    days: MONTHLY_PACKAGE_DAYS,
+    services: ""
+  }];
+  try {
+    const sheet = SpreadsheetApp.openByUrl(FILE_B_URL).getSheetByName(SHEET_CARD_TYPES);
+    if (!sheet) return fallback;
+    const data = sheet.getDataRange().getValues();
+    const cards = [];
+    for (let i = 1; i < data.length; i++) {
+      const name = cleanText_(data[i][0]);
+      const uses = Number(data[i][2]);
+      const days = Number(data[i][3]);
+      if (!name || !Number.isFinite(uses) || uses <= 0 || !Number.isFinite(days) || days <= 0) continue;
+      const enabled = cleanText_(data[i][6]);
+      if (/^(否|no|n|0|false|x|✗|✘)$/i.test(enabled)) continue;  // 空白視為啟用
+      cards.push({
+        name: name,
+        price: parseAmount_(data[i][1]) || 0,
+        uses: uses,
+        days: days,
+        services: cleanText_(data[i][4]),
+        order: Number(data[i][5]) || 999
+      });
+    }
+    if (!cards.length) return fallback;
+    cards.sort(function (a, b) { return a.order - b.order; });
+    return cards;
+  } catch (err) {
+    Logger.log("loadCardTypes_ failed: " + err);
+    return fallback;
+  }
+}
+
+// 按卡名找卡別定義；沒給卡名 = 預設卡（第一張，向後相容舊前端）；找不到 = null
+function findCardType_(cards, name) {
+  const key = cleanText_(name);
+  if (!key) return cards[0] || null;
+  for (let i = 0; i < cards.length; i++) {
+    if (cards[i].name === key) return cards[i];
+  }
+  return null;
 }
 
 function parseDate_(value) {

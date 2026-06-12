@@ -1141,16 +1141,18 @@
         </div>
         <div id="monthlySelectedWrap" class="hidden">
           <div id="monthlySelected" class="selected-card"></div>
+          <!-- 卡別選擇（「卡別設定」分頁有 2 張卡以上才顯示） -->
+          <div id="monthlyCardRow" class="submode-row hidden" style="grid-template-columns:repeat(auto-fit,minmax(90px,1fr));"></div>
           <div class="submode-row">
             <button type="button" class="submode-btn active" data-submode="use">📅 扣次數</button>
-            <button type="button" class="submode-btn" data-submode="new">➕ 新購包月</button>
+            <button type="button" class="submode-btn" data-submode="new">➕ 新購</button>
           </div>
           <div class="field">
             <label class="field-label">✂️ 服務項目（可複選）</label>
             <div id="monthlyServices" class="service-row" data-services></div>
           </div>
           <div id="monthlyAmountWrap" class="field hidden">
-            <label class="field-label" for="monthlyAmount">💵 包月金額（45 天 5 次）</label>
+            <label class="field-label" for="monthlyAmount" id="monthlyAmountLabel">💵 包月金額（45 天 5 次）</label>
             <input id="monthlyAmount" class="num-input" type="number" inputmode="numeric" value="1500">
           </div>
           <div id="monthlyPreview" class="preview" style="display:none"></div>
@@ -1219,8 +1221,23 @@
       services: DEFAULT_SERVICES.slice(),  // 服務項目（複選；3 個 mode 共用，切 mode/送出後重置）
       selectedCustomer: null,         // 儲值/包月選定的客戶
       monthlySubmode: "use",          // "use" | "new"
+      cardTypes: [],                  // 卡別清單（後端「卡別設定」分頁；舊後端沒回就用預設洗澡卡）
+      selectedCardName: "",           // 包月結單目前選的卡別
       submitting: false
     };
+
+    // 舊後端（沒回 cardTypes）時的相容預設卡
+    const FALLBACK_CARD = { name: "洗澡卡", price: 1500, uses: 5, days: 45 };
+    function currentCard() {
+      return state.cardTypes.find(ct => ct.name === state.selectedCardName) || state.cardTypes[0] || FALLBACK_CARD;
+    }
+    // 取某客戶某卡別的狀態；舊後端（無 cards 結構）頂層即唯一一張卡
+    function cardStatusOf(customer, cardName) {
+      const m = customer && customer.monthly;
+      if (!m) return null;
+      if (m.cards) return m.cards[cardName] || null;
+      return (!m.cardName || m.cardName === cardName) ? m : null;
+    }
 
     const el = {
       profile:      document.getElementById("profile"),
@@ -1263,7 +1280,9 @@
       monthlyResults:     document.getElementById("monthlyResults"),
       monthlySelectedWrap:document.getElementById("monthlySelectedWrap"),
       monthlySelected:    document.getElementById("monthlySelected"),
+      monthlyCardRow:     document.getElementById("monthlyCardRow"),
       monthlyAmountWrap:  document.getElementById("monthlyAmountWrap"),
+      monthlyAmountLabel: document.getElementById("monthlyAmountLabel"),
       monthlyAmount:      document.getElementById("monthlyAmount"),
       monthlyPreview:     document.getElementById("monthlyPreview"),
       monthlySubmit:      document.getElementById("monthlySubmit"),
@@ -1469,6 +1488,12 @@
         const payload = await res.json();
         if (!payload.ok) throw new Error(payload.message || "讀取失敗");
         state.customers = Array.isArray(payload.customers) ? payload.customers : [];
+        state.cardTypes = Array.isArray(payload.cardTypes) && payload.cardTypes.length
+          ? payload.cardTypes
+          : [FALLBACK_CARD];
+        if (!state.cardTypes.some(ct => ct.name === state.selectedCardName)) {
+          state.selectedCardName = state.cardTypes[0].name;
+        }
         el.searchPanel.classList.remove("hidden");
         const upd = formatUpdated(payload.updatedAt);
         if (upd) {
@@ -1586,6 +1611,12 @@
 
     function renderMonthlyBadge(m) {
       if (!m) return '';
+      // 多卡別後端：m.cards = { 卡名: status }，每張卡各畫一條；舊後端：m 本身就是唯一一張卡
+      const statuses = m.cards ? Object.values(m.cards) : [m];
+      return statuses.map(renderOneCardBadge).join('');
+    }
+    function renderOneCardBadge(m) {
+      const label = escapeHtml(m.cardName || '包月');
       if (m.isActive) {
         const warn = m.daysLeft <= 7 || m.remaining <= 1;
         const icon = warn ? '⚠️' : '📅';
@@ -1593,7 +1624,7 @@
         return `
           <div class="monthly ${cls}">
             <span class="monthly-icon">${icon}</span>
-            <span>包月中｜剩 <b>${m.remaining}</b> 次｜還有 <b>${m.daysLeft}</b> 天到期
+            <span>${label}｜剩 <b>${m.remaining}</b> 次｜還有 <b>${m.daysLeft}</b> 天到期
               <span class="monthly-detail">（${escapeHtml(m.expireDate)} 前用完）</span>
             </span>
           </div>`;
@@ -1602,14 +1633,14 @@
         return `
           <div class="monthly inactive">
             <span class="monthly-icon">📅</span>
-            <span>包月已過期（${escapeHtml(m.expireDate)} 截止），用了 ${m.used}/5 次</span>
+            <span>${label}已過期（${escapeHtml(m.expireDate)} 截止），用了 ${m.used}/${m.used + m.remaining} 次</span>
           </div>`;
       }
       if (m.isUsedUp) {
         return `
           <div class="monthly inactive">
             <span class="monthly-icon">📅</span>
-            <span>包月 5 次已用完<span class="monthly-detail">（${escapeHtml(m.expireDate)} 前有效）</span></span>
+            <span>${label}次數已用完<span class="monthly-detail">（${escapeHtml(m.expireDate)} 前有效）</span></span>
           </div>`;
       }
       return '';
@@ -1737,34 +1768,65 @@
       } else if (mode === "monthly") {
         el.monthlySearchWrap.classList.add("hidden");
         el.monthlySelectedWrap.classList.remove("hidden");
-        const m = customer.monthly;
-        let statusHtml = "";
-        if (m && m.isActive) {
-          const cls = m.daysLeft <= 7 || m.remaining <= 1 ? "warn" : "monthly";
-          statusHtml = `<div class="sc-status ${cls}">📅 包月中｜剩 ${m.remaining} 次｜${m.daysLeft} 天到期</div>`;
-          state.monthlySubmode = "use";
-        } else if (m && m.isExpired) {
-          statusHtml = `<div class="sc-status danger">⚠️ 包月已過期，請改用「新購」</div>`;
-          state.monthlySubmode = "new";
-        } else if (m && m.isUsedUp) {
-          statusHtml = `<div class="sc-status danger">⚠️ 包月 5 次已用完，請改用「新購」</div>`;
-          state.monthlySubmode = "new";
-        } else {
-          statusHtml = `<div class="sc-status warn">尚無包月紀錄，可按「新購包月」</div>`;
-          state.monthlySubmode = "new";
-        }
-        el.monthlySelected.innerHTML = `
-          <button type="button" class="sc-clear" id="monthlyClearBtn">✕ 換客戶</button>
-          <div class="sc-name">🐾 ${escapeHtml(petName)}</div>
-          <div class="sc-phone">${escapeHtml(customer.phone || "")} ${escapeHtml(customer.name ? "・" + customer.name : "")}</div>
-          ${statusHtml}
-        `;
-        document.getElementById("monthlyClearBtn").addEventListener("click", () => clearSelected("monthly"));
-        // 同步 submode 按鈕 UI
-        el.submodeBtns.forEach(b => b.classList.toggle("active", b.dataset.submode === state.monthlySubmode));
-        el.monthlyAmountWrap.classList.toggle("hidden", state.monthlySubmode !== "new");
-        updateMonthlyPreview();
+        renderMonthlyCardRow();
+        refreshMonthlySelected();
       }
+    }
+
+    // 卡別選擇列（兩張卡以上才顯示；切卡後重算選定客戶的狀態）
+    function renderMonthlyCardRow() {
+      const multi = state.cardTypes.length > 1;
+      el.monthlyCardRow.classList.toggle("hidden", !multi);
+      if (!multi) { el.monthlyCardRow.innerHTML = ""; return; }
+      el.monthlyCardRow.innerHTML = state.cardTypes.map(ct => `
+        <button type="button" class="submode-btn ${ct.name === state.selectedCardName ? "active" : ""}"
+          data-card="${escapeAttr(ct.name)}">🎫 ${escapeHtml(ct.name)}</button>
+      `).join("");
+      Array.from(el.monthlyCardRow.querySelectorAll("[data-card]")).forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.selectedCardName = btn.dataset.card;
+          renderMonthlyCardRow();
+          refreshMonthlySelected();
+        });
+      });
+    }
+
+    // 依「目前選的卡別」重畫選定客戶卡狀態 + submode + 金額預設值
+    function refreshMonthlySelected() {
+      const customer = state.selectedCustomer;
+      if (!customer) return;
+      const petName = (customer.pets[0] && customer.pets[0].name) || "未填寵物";
+      const card = currentCard();
+      const m = cardStatusOf(customer, card.name);
+      const label = escapeHtml(card.name);
+      let statusHtml = "";
+      if (m && m.isActive) {
+        const cls = m.daysLeft <= 7 || m.remaining <= 1 ? "warn" : "monthly";
+        statusHtml = `<div class="sc-status ${cls}">📅 ${label}｜剩 ${m.remaining} 次｜${m.daysLeft} 天到期</div>`;
+        state.monthlySubmode = "use";
+      } else if (m && m.isExpired) {
+        statusHtml = `<div class="sc-status danger">⚠️ ${label}已過期，請改用「新購」</div>`;
+        state.monthlySubmode = "new";
+      } else if (m && m.isUsedUp) {
+        statusHtml = `<div class="sc-status danger">⚠️ ${label}次數已用完，請改用「新購」</div>`;
+        state.monthlySubmode = "new";
+      } else {
+        statusHtml = `<div class="sc-status warn">尚無${label}紀錄，可按「新購」</div>`;
+        state.monthlySubmode = "new";
+      }
+      el.monthlySelected.innerHTML = `
+        <button type="button" class="sc-clear" id="monthlyClearBtn">✕ 換客戶</button>
+        <div class="sc-name">🐾 ${escapeHtml(petName)}</div>
+        <div class="sc-phone">${escapeHtml(customer.phone || "")} ${escapeHtml(customer.name ? "・" + customer.name : "")}</div>
+        ${statusHtml}
+      `;
+      document.getElementById("monthlyClearBtn").addEventListener("click", () => clearSelected("monthly"));
+      // 同步 submode 按鈕 UI + 金額欄（標籤/預設值跟著卡別走）
+      el.submodeBtns.forEach(b => b.classList.toggle("active", b.dataset.submode === state.monthlySubmode));
+      el.monthlyAmountWrap.classList.toggle("hidden", state.monthlySubmode !== "new");
+      el.monthlyAmountLabel.textContent = `💵 ${card.name}金額（${card.days} 天 ${card.uses} 次）`;
+      el.monthlyAmount.value = card.price ? String(card.price) : "";
+      updateMonthlyPreview();
     }
 
     function clearSelected(mode) {
@@ -1801,21 +1863,22 @@
     function updateMonthlyPreview() {
       const c = state.selectedCustomer;
       if (!c) { el.monthlyPreview.style.display = "none"; return; }
-      const m = c.monthly;
+      const card = currentCard();
+      const m = cardStatusOf(c, card.name);
       if (state.monthlySubmode === "use") {
         if (!m || !m.isActive) {
           el.monthlyPreview.style.display = "block";
           el.monthlyPreview.classList.add("warn");
-          el.monthlyPreview.textContent = "⚠️ 此客戶無有效包月，請改用「新購」";
+          el.monthlyPreview.textContent = `⚠️ 此客戶無有效${card.name}，請改用「新購」`;
           return;
         }
         el.monthlyPreview.style.display = "block";
         el.monthlyPreview.classList.remove("warn");
-        el.monthlyPreview.textContent = `本次第 ${m.used + 1} 次｜扣後剩 ${m.remaining - 1} 次`;
+        el.monthlyPreview.textContent = `${card.name}本次第 ${m.used + 1} 次｜扣後剩 ${m.remaining - 1} 次`;
       } else {
         el.monthlyPreview.style.display = "block";
         el.monthlyPreview.classList.remove("warn");
-        el.monthlyPreview.textContent = `新購：含當次第 1 次｜45 天 5 次｜剩 4 次`;
+        el.monthlyPreview.textContent = `新購${card.name}：含當次第 1 次｜${card.days} 天 ${card.uses} 次｜剩 ${card.uses - 1} 次`;
       }
     }
 
@@ -1878,12 +1941,14 @@
       if (!service) return showHint(el.monthlyHint, "請至少勾一個服務項目", "error");
 
       const petName = (c.pets[0] && c.pets[0].name) || "";
+      const card = currentCard();
       const payload = {
         type: "monthly",
         phone: c.phone,
         petName: petName,
         mode: mode,
-        service: service
+        service: service,
+        cardType: card.name
       };
       if (mode === "new") {
         const amount = Number(el.monthlyAmount.value);
@@ -1895,15 +1960,16 @@
 
       await postSubmit(payload, el.monthlySubmit, el.monthlyHint, (resp) => {
         const s = resp.summary || {};
+        const cardLabel = escapeHtml(s.cardName || card.name);
         if (mode === "new") {
           return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
                   <div>✂️ 服務：<b>${escapeHtml(service)}</b></div>
-                  <div>➕ 新購包月 <b>${formatMoney(s.amount)}</b></div>
+                  <div>➕ 新購${cardLabel} <b>${formatMoney(s.amount)}</b></div>
                   <div>📅 含當次第 1 次｜剩 ${s.remaining} 次｜${escapeHtml(s.expireDate)} 到期</div>`;
         }
         return `<div>🐾 寵物：<b>${escapeHtml(petName)}</b></div>
                 <div>✂️ 服務：<b>${escapeHtml(service)}</b></div>
-                <div>📅 第 <b>${s.used}</b> 次｜剩 <b>${s.remaining}</b> 次</div>`;
+                <div>📅 ${cardLabel} 第 <b>${s.used}</b> 次｜剩 <b>${s.remaining}</b> 次</div>`;
       });
     }
 
@@ -1969,7 +2035,7 @@
       // 包月
       el.monthlySearch.value = "";
       el.monthlyResults.innerHTML = "";
-      el.monthlyAmount.value = "1500";
+      el.monthlyAmount.value = String(currentCard().price || "");
       el.monthlyPreview.style.display = "none";
       el.monthlySearchWrap.classList.remove("hidden");
       el.monthlySelectedWrap.classList.add("hidden");
