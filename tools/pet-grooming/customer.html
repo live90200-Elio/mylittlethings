@@ -1221,6 +1221,15 @@
     // 要改名字直接改這個陣列即可，不用動其他 code
     const OPERATORS = ["Elio", "美月兒", "shan🌸", "Jenny"];
 
+    // userId → 結單者名字：用來「自動帶入登入者」（誰登入就預選誰，仍可手動點別人覆蓋）
+    // 對照後端 ALLOWED_LINE_USER_IDS；新員工要自動帶入就在這加一行
+    const OPERATOR_BY_UID = {
+      "Uc91d607de27558c937af89be42699678": "shan🌸",
+      "U74ba014545211a09942ccc17bcc28e39": "Elio",
+      "U61199309b9ff3f86b4872f1aeb147418": "美月兒",
+      "Udb797fdc8b926bff6f972be748450ecb": "Jenny"
+    };
+
     // 服務項目清單（散客/儲值/包月共用，複選；payload 用「、」串成字串送後端）
     // 要加減項目直接改這個陣列即可
     const SERVICES = ["洗澡", "大美容", "剪指甲", "皮膚調理", "拆打結", "除廢毛", "貴賓腳", "其他"];
@@ -1474,6 +1483,14 @@
           });
         });
       });
+      // 自動帶入登入者：誰登入就預選誰（仍可點別人覆蓋；不在對照表的人則維持手動選）
+      const me = state.profile && OPERATOR_BY_UID[state.profile.userId];
+      if (me) {
+        state.operator = me;
+        Array.from(el.operatorChips.querySelectorAll(".operator-chip")).forEach(c => {
+          c.classList.toggle("active", c.dataset.operator === me);
+        });
+      }
     }
 
     // 服務項目（3 panel 共用 state.services；render 一次塞進 3 個容器，click 同步全部）
