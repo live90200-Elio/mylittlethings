@@ -38,7 +38,7 @@ const DEFAULT_CARD_NAME = "洗澡卡";
 
 const ALLOWED_LINE_USER_IDS = {
   "Uc91d607de27558c937af89be42699678": "shan🌸",
-  "U5098240716740dd49287db197da9c878": "Mr曾",
+  "U74ba014545211a09942ccc17bcc28e39": "Elio",
   "U61199309b9ff3f86b4872f1aeb147418": "美月兒",
   "Udb797fdc8b926bff6f972be748450ecb": "Jenny"
 };
