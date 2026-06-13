@@ -2,13 +2,13 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>老闆私藏儀表板 — 寵美</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>營業儀表板 — 洗毛這件小事</title>
 
 <!-- 加到 iPhone 主畫面用 -->
-<meta name="theme-color" content="#0f1724">
+<meta name="theme-color" content="#0b1220">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="老闆">
+<meta name="apple-mobile-web-app-title" content="儀表板">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
@@ -18,118 +18,161 @@
   html, body { height: 100%; }
   body {
     font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
-    background: #0f1724;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(232,208,122,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 30%, rgba(122,178,232,.08), transparent 55%),
+      linear-gradient(165deg, #0b1220 0%, #121b2e 55%, #0d1424 100%);
+    background-attachment: fixed;
     color: #e8ecf5;
-    line-height: 1.5;
+    line-height: 1.55;
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .app { max-width: 960px; margin: 0 auto; padding: 16px; }
+  .app { max-width: 960px; margin: 0 auto; padding: 14px 16px 8px; }
 
   /* ===== 登入畫面 ===== */
   .login {
-    min-height: 100vh; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; padding: 20px;
+    min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
   }
   .login-card {
-    background: #1a2332; border-radius: 14px; padding: 32px;
-    width: 100%; max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,.3);
+    background: linear-gradient(170deg, rgba(36,48,72,.85), rgba(22,31,50,.95));
+    border: 1px solid rgba(232,208,122,.25);
+    border-radius: 20px; padding: 36px 30px;
+    width: 100%; max-width: 360px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+    backdrop-filter: blur(8px);
+    text-align: center;
   }
-  .login h1 { font-size: 22px; margin-bottom: 8px; color: #e8d07a; }
-  .login .sub { font-size: 13px; color: #8a9aad; margin-bottom: 24px; }
+  .login .paw { font-size: 40px; }
+  .login h1 { font-size: 21px; margin: 10px 0 4px; color: #f3e2a3; letter-spacing: 1px; }
+  .login .sub { font-size: 13px; color: #8a9aad; margin-bottom: 26px; }
   .login input {
-    width: 100%; font-size: 16px; padding: 12px 14px; margin-bottom: 12px;
-    border: 1px solid #2d3b52; border-radius: 8px; background: #0f1724; color: #e8ecf5;
-    outline: none;
+    width: 100%; font-size: 17px; padding: 13px 16px; margin-bottom: 12px;
+    border: 1px solid #31415e; border-radius: 12px; background: rgba(11,18,32,.8); color: #e8ecf5;
+    outline: none; text-align: center; letter-spacing: 2px;
   }
-  .login input:focus { border-color: #e8d07a; }
+  .login input:focus { border-color: #e8d07a; box-shadow: 0 0 0 3px rgba(232,208,122,.15); }
   .login button {
-    width: 100%; padding: 12px; font-size: 16px; font-weight: 600;
-    background: #e8d07a; color: #0f1724; border: none; border-radius: 8px; cursor: pointer;
+    width: 100%; padding: 13px; font-size: 16px; font-weight: 700; letter-spacing: 4px;
+    background: linear-gradient(135deg, #f0db8e, #d4a547); color: #1a1408;
+    border: none; border-radius: 12px; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(212,165,71,.35);
   }
-  .login button:hover { background: #f0db8e; }
+  .login button:active { transform: translateY(1px); }
   .login button:disabled { opacity: .5; cursor: wait; }
-  .login .error { color: #ff6b6b; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .login .error { color: #ff8585; font-size: 13px; margin-top: 10px; min-height: 18px; }
 
-  /* ===== 主儀表板 ===== */
-  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 8px 4px 16px; flex-wrap: wrap; }
-  h1.title { font-size: 22px; color: #e8d07a; }
-  .period-label { font-size: 13px; color: #8a9aad; margin-top: 2px; }
-  .header-actions { display: flex; gap: 8px; }
-  .icon-btn {
-    background: #1a2332; border: 1px solid #2d3b52; color: #e8ecf5;
-    padding: 8px 12px; font-size: 14px; border-radius: 8px; cursor: pointer;
+  /* ===== 頂欄 ===== */
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 2px 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand .logo {
+    width: 40px; height: 40px; flex: none; border-radius: 12px;
+    background: linear-gradient(135deg, #f0db8e, #d4a547);
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    box-shadow: 0 4px 12px rgba(212,165,71,.35);
   }
-  .icon-btn:hover { background: #24324a; }
-  .icon-btn:disabled { opacity: .5; cursor: wait; }
+  h1.title { font-size: 17px; color: #f3e2a3; letter-spacing: .5px; white-space: nowrap; }
+  .period-label { font-size: 12px; color: #8a9aad; margin-top: 1px; }
+  .header-actions { display: flex; gap: 8px; flex: none; }
+  .icon-btn {
+    background: rgba(36,48,72,.7); border: 1px solid #31415e; color: #e8ecf5;
+    width: 38px; height: 38px; font-size: 15px; border-radius: 11px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:active { background: #2c3a57; }
+  .icon-btn:disabled { opacity: .45; cursor: wait; }
   .icon-btn .spin { display: inline-block; }
   .icon-btn.loading .spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* ===== 期間切換 ===== */
   .period-tabs {
-    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
+    display: flex; gap: 4px; margin-bottom: 18px;
+    background: rgba(17,25,42,.8); border: 1px solid #25324c;
+    border-radius: 13px; padding: 4px;
   }
   .period-tabs button {
-    flex: 1; min-width: 80px; padding: 10px 8px; font-size: 14px;
-    background: #1a2332; color: #8a9aad; border: 1px solid #2d3b52;
-    border-radius: 8px; cursor: pointer;
+    flex: 1; padding: 9px 4px; font-size: 13.5px;
+    background: transparent; color: #8a9aad; border: none;
+    border-radius: 9px; cursor: pointer; white-space: nowrap;
   }
   .period-tabs button.active {
-    background: #e8d07a; color: #0f1724; border-color: #e8d07a; font-weight: 700;
+    background: linear-gradient(135deg, #f0db8e, #d4a547);
+    color: #1a1408; font-weight: 700;
+    box-shadow: 0 3px 10px rgba(212,165,71,.3);
   }
 
+  /* ===== KPI ===== */
   .kpis {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px; margin-bottom: 24px;
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 10px; margin-bottom: 22px;
   }
+  @media (min-width: 640px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
   .kpi {
-    background: #1a2332; border-radius: 12px; padding: 16px;
-    border: 1px solid #2d3b52;
+    background: linear-gradient(170deg, rgba(33,44,68,.9), rgba(20,28,46,.95));
+    border-radius: 16px; padding: 14px 16px;
+    border: 1px solid #28344f;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25);
   }
-  .kpi-label { font-size: 13px; color: #8a9aad; }
-  .kpi-value { font-size: 28px; font-weight: 700; color: #e8d07a; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .kpi-value.small { font-size: 22px; color: #a8d8b9; }
+  .kpi.hero { grid-column: span 2; border-color: rgba(232,208,122,.35); }
+  @media (min-width: 640px) { .kpi.hero { grid-column: span 1; } }
+  .kpi-label { font-size: 12px; color: #8a9aad; letter-spacing: 1px; }
+  .kpi-value { font-size: 27px; font-weight: 800; color: #f3e2a3; margin-top: 3px; font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+  .kpi.hero .kpi-value { font-size: 32px; }
+  .kpi-value.small { font-size: 21px; color: #a8d8b9; }
   .kpi-sub { font-size: 11px; color: #6a7a8d; margin-top: 2px; }
-  .kpi-growth { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; font-weight: 500; }
-  .kpi-growth.up { color: #a8d8b9; }
-  .kpi-growth.down { color: #ff6b6b; }
-  .kpi-growth.flat { color: #6a7a8d; }
+  .kpi-growth {
+    display: inline-block; font-size: 12px; margin-top: 6px; padding: 2px 9px;
+    border-radius: 999px; font-variant-numeric: tabular-nums; font-weight: 600;
+  }
+  .kpi-growth.up { color: #9fe3b4; background: rgba(82,180,120,.15); }
+  .kpi-growth.down { color: #ff9b9b; background: rgba(220,90,90,.15); }
+  .kpi-growth.flat { color: #8a9aad; background: rgba(120,140,170,.12); }
 
-  section { margin-bottom: 24px; }
-  h2 { font-size: 16px; color: #e8ecf5; margin-bottom: 12px; padding-left: 8px; border-left: 3px solid #e8d07a; }
+  section { margin-bottom: 22px; }
+  h2 {
+    font-size: 14px; color: #cdd8e8; margin-bottom: 10px; padding-left: 10px;
+    border-left: 3px solid #e8d07a; letter-spacing: 1.5px;
+  }
 
   .card {
-    background: #1a2332; border-radius: 12px; padding: 16px;
-    border: 1px solid #2d3b52;
+    background: linear-gradient(170deg, rgba(30,40,62,.9), rgba(19,27,44,.95));
+    border-radius: 16px; padding: 16px;
+    border: 1px solid #28344f;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25);
   }
 
   /* bar chart row */
   .bar-row {
-    display: grid; grid-template-columns: 100px 1fr 100px;
-    gap: 10px; align-items: center; margin-bottom: 10px;
+    display: grid; grid-template-columns: 86px 1fr 96px;
+    gap: 10px; align-items: center; margin-bottom: 12px;
   }
   .bar-row:last-child { margin-bottom: 0; }
   .bar-row .bar-label { font-size: 14px; color: #e8ecf5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-row .bar-track { background: #2d3b52; border-radius: 4px; height: 18px; overflow: hidden; }
-  .bar-row .bar-fill { background: linear-gradient(90deg, #e8d07a, #d4a547); height: 100%; border-radius: 4px; transition: width .4s; }
-  .bar-row .bar-value { font-size: 13px; color: #a8d8b9; text-align: right; font-variant-numeric: tabular-nums; }
-  .bar-row .bar-value .count { font-size: 11px; color: #6a7a8d; }
+  .bar-row .bar-track { background: rgba(45,59,82,.6); border-radius: 999px; height: 14px; overflow: hidden; }
+  .bar-row .bar-fill { background: linear-gradient(90deg, #f0db8e, #d4a547); height: 100%; border-radius: 999px; transition: width .5s ease; }
+  .bar-row .bar-value { font-size: 13px; color: #a8d8b9; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .bar-row .bar-value .count { display: block; font-size: 10.5px; color: #6a7a8d; }
 
   /* recent list */
   .txn {
-    display: grid; grid-template-columns: 80px 1fr auto;
-    gap: 8px; padding: 10px 0; border-bottom: 1px solid #2d3b52;
+    display: grid; grid-template-columns: 52px 1fr auto;
+    gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(45,59,82,.5);
     font-size: 14px; align-items: center;
   }
-  .txn:last-child { border-bottom: none; }
+  .txn:last-child { border-bottom: none; padding-bottom: 2px; }
+  .txn:first-child { padding-top: 2px; }
   .txn .date { color: #8a9aad; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .txn .main { min-width: 0; }
   .txn .main strong { color: #e8ecf5; }
-  .txn .main .sub { color: #8a9aad; font-size: 12px; }
-  .txn .amt { color: #e8d07a; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .txn .amt .pay { display: block; font-size: 11px; font-weight: 400; color: #6a7a8d; margin-top: 2px; }
+  .txn .main .sub { color: #8a9aad; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .txn .amt { color: #f3e2a3; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+  .txn .amt .pay { display: block; font-size: 10.5px; font-weight: 400; color: #6a7a8d; margin-top: 1px; }
 
-  .empty-state { text-align: center; padding: 30px; color: #6a7a8d; font-size: 14px; }
-  .error-box { background: #3d1a1a; border: 1px solid #6b2a2a; color: #ffb8b8; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+  .empty-state { text-align: center; padding: 28px; color: #6a7a8d; font-size: 14px; }
+  .error-box { background: rgba(80,30,30,.5); border: 1px solid #6b2a2a; color: #ffb8b8; padding: 12px; border-radius: 12px; font-size: 13px; margin-bottom: 16px; }
 
-  footer { padding: 20px 4px; font-size: 11px; color: #4a5a6d; text-align: center; }
+  footer { padding: 18px 4px 26px; font-size: 11px; color: #4a5a6d; text-align: center; line-height: 1.8; }
 </style>
 </head>
 <body>
@@ -137,9 +180,10 @@
 <!-- ===== 登入畫面 ===== -->
 <div id="loginScreen" class="login">
   <div class="login-card">
-    <h1>🔐 老闆儀表板</h1>
-    <div class="sub">輸入密碼進入</div>
-    <input type="password" id="keyInput" placeholder="密碼" autocomplete="off">
+    <div class="paw">🐾</div>
+    <h1>洗毛這件小事</h1>
+    <div class="sub">營業儀表板 · 請輸入密碼</div>
+    <input type="password" id="keyInput" placeholder="••••••" autocomplete="off">
     <button id="loginBtn">進入</button>
     <div class="error" id="loginError"></div>
   </div>
@@ -148,9 +192,12 @@
 <!-- ===== 主儀表板 ===== -->
 <div id="dashboard" class="app" hidden>
   <header>
-    <div>
-      <h1 class="title">📊 寵美儀表板</h1>
-      <div class="period-label" id="periodLabel">—</div>
+    <div class="brand">
+      <div class="logo">🐾</div>
+      <div>
+        <h1 class="title">營業儀表板</h1>
+        <div class="period-label" id="periodLabel">—</div>
+      </div>
     </div>
     <div class="header-actions">
       <button id="exportBtn" class="icon-btn" title="匯出本期交易為 CSV" disabled>📥</button>
@@ -171,15 +218,15 @@
   <div id="errorBox"></div>
 
   <div class="kpis">
-    <div class="kpi">
-      <div class="kpi-label">總營收</div>
+    <div class="kpi hero">
+      <div class="kpi-label">💰 總營收</div>
       <div class="kpi-value" id="kpiRevenue">—</div>
       <div class="kpi-growth flat" id="kpiGrowth">—</div>
     </div>
-    <div class="kpi"><div class="kpi-label">交易筆數</div><div class="kpi-value" id="kpiCount">—</div></div>
-    <div class="kpi"><div class="kpi-label">平均單筆</div><div class="kpi-value" id="kpiAvg">—</div></div>
+    <div class="kpi"><div class="kpi-label">🧾 交易筆數</div><div class="kpi-value" id="kpiCount">—</div></div>
+    <div class="kpi"><div class="kpi-label">📐 平均單筆</div><div class="kpi-value" id="kpiAvg">—</div></div>
     <div class="kpi">
-      <div class="kpi-label">儲值金池</div>
+      <div class="kpi-label">🏦 儲值金池</div>
       <div class="kpi-value small" id="kpiPool">—</div>
       <div class="kpi-sub">全客戶餘額總計</div>
     </div>
@@ -200,7 +247,10 @@
     <div class="card" id="recent"><div class="empty-state">載入中…</div></div>
   </section>
 
-  <footer>🔒 僅供老闆檢視 · 密碼儲存於此瀏覽器的 localStorage</footer>
+  <footer>
+    <span id="generatedAt"></span><br>
+    🔒 僅供老闆檢視 · 密碼記在這支手機，不用每次輸入
+  </footer>
 </div>
 
 <script>
@@ -337,6 +387,9 @@ function renderAll(d) {
   document.getElementById("kpiCount").textContent = (d.transactionCount || 0).toLocaleString();
   document.getElementById("kpiAvg").textContent = fmtMoney(d.avgPerTransaction);
   document.getElementById("kpiPool").textContent = fmtMoney(d.storedValuePool);
+  document.getElementById("generatedAt").textContent = d.generatedAt
+    ? "資料更新：" + new Date(d.generatedAt).toLocaleString("zh-TW", { hour12: false })
+    : "";
 
   renderGrowth(d.comparison);
   renderBars("byGroomer", d.byGroomer, d.totalRevenue);
@@ -403,7 +456,7 @@ function exportCSV() {
   ]);
   const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\r\n");
   // 加 BOM 讓 Excel 正確識別 UTF-8
-  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
   const label = (currentData.period && currentData.period.label) || "本期";
   const filename = `寵美交易_${safeFilename(label)}.csv`;
   const a = document.createElement("a");
