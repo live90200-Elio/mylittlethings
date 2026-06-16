@@ -128,9 +128,40 @@
     background: #8a5a2b; color: #fff; text-decoration: none;
     border-radius: 10px; font-weight: 600;
   }
+
+  /* 填單前提醒 modal */
+  .pre-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; z-index: 9999;
+  }
+  .pre-modal .box {
+    background: #fff; border-radius: 18px; padding: 28px 22px;
+    max-width: 340px; width: 100%; text-align: center;
+    box-shadow: 0 10px 36px rgba(0,0,0,.28);
+  }
+  .pre-modal .ic { font-size: 48px; line-height: 1; }
+  .pre-modal h3 { color: #6e4620; font-size: 20px; margin: 10px 0 12px; }
+  .pre-modal p { color: #444; font-size: 16px; line-height: 1.85; margin: 0 0 22px; }
+  .pre-modal p strong { color: #c0392b; }
+  .pre-modal button {
+    width: 100%; padding: 14px; border: 0; border-radius: 12px;
+    background: #8a5a2b; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  }
 </style>
 </head>
 <body>
+
+<!-- 填單前提醒（一進頁面就跳，按了才開始填） -->
+<div class="pre-modal" id="preModal">
+  <div class="box">
+    <div class="ic">📅</div>
+    <h3>填單前小提醒</h3>
+    <p>請先與美容師<strong>確定好預約時間</strong>後，<br>再進行填單！</p>
+    <button id="preModalOk">我知道了，開始填單</button>
+  </div>
+</div>
+
 <div class="app">
 
   <div id="form-view">
@@ -274,6 +305,9 @@
     t.classList.add("show");
     setTimeout(() => t.classList.remove("show"), 2500);
   };
+
+  // 填單前提醒：按「我知道了」才關閉
+  $("preModalOk").addEventListener("click", () => { $("preModal").style.display = "none"; });
 
   // --- 美容項目勾選狀態樣式 ---
   document.querySelectorAll("#services .check-item").forEach((el) => {
