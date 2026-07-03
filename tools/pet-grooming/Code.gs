@@ -36,11 +36,13 @@ const MONTHLY_PACKAGE_USES = 5;
 const MONTHLY_DEFAULT_PRICE = 1500;
 const DEFAULT_CARD_NAME = "洗澡卡";
 
+// ⚠️ 真實 userId 僅存 GAS 編輯器（線上）與 private 備份 repo；公開母版用佔位符，避免洩漏員工/老闆識別碼。
+// 部署到 GAS 時換成真實 userId↔名字（或改從 ScriptProperties 讀）。
 const ALLOWED_LINE_USER_IDS = {
-  "Uc91d607de27558c937af89be42699678": "shan🌸",
-  "U74ba014545211a09942ccc17bcc28e39": "Elio",
-  "U61199309b9ff3f86b4872f1aeb147418": "美月兒",
-  "Udb797fdc8b926bff6f972be748450ecb": "Jenny"
+  "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx01": "員工A",
+  "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx02": "員工B",
+  "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx03": "員工C",
+  "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx04": "老闆"
 };
 
 function doGet(e) {

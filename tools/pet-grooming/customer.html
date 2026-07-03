@@ -1221,14 +1221,8 @@
     // 要改名字直接改這個陣列即可，不用動其他 code
     const OPERATORS = ["Elio", "美月兒", "shan🌸", "Jenny"];
 
-    // userId → 結單者名字：用來「自動帶入登入者」（誰登入就預選誰，仍可手動點別人覆蓋）
-    // 對照後端 ALLOWED_LINE_USER_IDS；新員工要自動帶入就在這加一行
-    const OPERATOR_BY_UID = {
-      "Uc91d607de27558c937af89be42699678": "shan🌸",
-      "U74ba014545211a09942ccc17bcc28e39": "Elio",
-      "U61199309b9ff3f86b4872f1aeb147418": "美月兒",
-      "Udb797fdc8b926bff6f972be748450ecb": "Jenny"
-    };
+    // 登入者名字改由後端驗證後回傳（payload.viewer.name）自動帶入，前端不再存 userId 明文對照
+    // （2026-07-04 安全修補：原本硬編真實 userId↔姓名，會把員工/老闆識別碼洩漏到公開 repo）
 
     // 服務項目清單（散客/儲值/包月共用，複選；payload 用「、」串成字串送後端）
     // 要加減項目直接改這個陣列即可
@@ -1264,6 +1258,7 @@
       checkoutMode: "guest",          // "guest" | "credit" | "monthly"
       payment: "現金",                // 散客付款方式
       operator: "",                   // 結單者名稱（員工自己選）
+      viewerName: "",                 // 登入員工名字（後端 verify 回傳，用於自動帶入）
       services: DEFAULT_SERVICES.slice(),  // 服務項目（複選；3 個 mode 共用，切 mode/送出後重置）
       selectedCustomer: null,         // 儲值/包月選定的客戶
       monthlySubmode: "use",          // "use" | "new"
@@ -1484,7 +1479,7 @@
         });
       });
       // 自動帶入登入者：誰登入就預選誰（仍可點別人覆蓋；不在對照表的人則維持手動選）
-      const me = state.profile && OPERATOR_BY_UID[state.profile.userId];
+      const me = state.viewerName;
       if (me) {
         state.operator = me;
         Array.from(el.operatorChips.querySelectorAll(".operator-chip")).forEach(c => {
@@ -1560,6 +1555,7 @@
           payload = await res.json();
           if (!payload.ok) throw new Error(payload.message || "讀取失敗");
         }
+        state.viewerName = (payload.viewer && payload.viewer.name) || "";
         state.customers = Array.isArray(payload.customers) ? payload.customers : [];
         state.cardTypes = Array.isArray(payload.cardTypes) && payload.cardTypes.length
           ? payload.cardTypes
