@@ -18,6 +18,8 @@ const SHEET_RECORD = "服務紀錄";
 const SHOP_NAME = "洗毛這件小事";
 // 健康檢查冷卻時間（毫秒）— 同一個故障 2 小時內只警報一次
 const ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+// 健康檢查失敗後的重試等待（毫秒）— GAS /exec 偶爾回瞬時性 404，重試可濾掉誤報
+const RETRY_DELAY_MS = 30 * 1000;
 // =================================================================================
 
 // ============================================================
@@ -195,7 +197,7 @@ function buildEmailHtml(now, s) {
 }
 
 // ============================================================
-// 流程 4：每小時打健康檢查 URL，異常推 LINE（每個 URL 獨立 2 小時冷卻）
+// 流程 4：每小時打健康檢查 URL，異常推 LINE（失敗 30 秒後重試一次；每個 URL 獨立 2 小時冷卻）
 // 部署：觸發條件 → 時間驅動 → 小時計時器 → 「每小時」
 //
 // HEALTH_URL 設定（ScriptProperties）：支援多個 URL
@@ -220,7 +222,8 @@ function healthCheck() {
   }
 }
 
-function checkOneUrl_(url, props) {
+// 打一次 URL，回 { ok, status }
+function probeUrl_(url) {
   let ok = false;
   let status = "";
   try {
@@ -246,12 +249,26 @@ function checkOneUrl_(url, props) {
   } catch (e) {
     status = "逾時或例外：" + String((e && e.message) || e).substring(0, 100);
   }
+  return { ok: ok, status: status };
+}
 
+function checkOneUrl_(url, props) {
   // 用 URL 的字母數字尾段做 cooldown key，多個 URL 各自獨立計時
   const cooldownKey = "LAST_ALERT_AT_" + url.replace(/[^A-Za-z0-9]/g, "").slice(-30);
   const label = labelOfUrl_(url);
 
-  if (ok) {
+  let result = probeUrl_(url);
+
+  // GAS /exec 偶爾回瞬時性 404/500：失敗先等 30 秒重試一次，兩次都掛才算異常
+  if (!result.ok) {
+    Logger.log("[" + label + "] 第一次失敗（" + result.status + "），30 秒後重試");
+    Utilities.sleep(RETRY_DELAY_MS);
+    result = probeUrl_(url);
+  }
+
+  const status = result.status;
+
+  if (result.ok) {
     props.deleteProperty(cooldownKey);
     Logger.log("[" + label + "] OK");
     return;
@@ -272,7 +289,7 @@ function checkOneUrl_(url, props) {
     "⚠️ Apps Script 服務異常\n" +
     "服務：" + label + "\n" +
     "偵測時間：" + new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }) + "\n" +
-    "狀態：" + status + "\n" +
+    "狀態：" + status + "（已重試 1 次仍失敗）\n" +
     "請至 Google Apps Script 管理部署確認";
   pushLine(text);
   props.setProperty(cooldownKey, String(now));
