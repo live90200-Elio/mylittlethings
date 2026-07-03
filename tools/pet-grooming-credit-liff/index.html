@@ -345,7 +345,12 @@
     if (!liffProfile) return;
     const card = $("balanceCard");
     try {
-      const res = await fetch(LIFF_API_URL + "?action=getMyCredit&liffUserId=" + encodeURIComponent(liffProfile.userId));
+      const token = await liff.getAccessToken();
+      const res = await fetch(LIFF_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // 避開 CORS preflight
+        body: JSON.stringify({ action: "getMyCredit", token: token }),
+      });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
@@ -448,7 +453,7 @@
         headers: { "Content-Type": "text/plain;charset=utf-8" }, // 避開 CORS preflight
         body: JSON.stringify({
           action: "requestTopup",
-          liffUserId: liffProfile.userId,
+          token: await liff.getAccessToken(),
           planName: pendingPlan.name,
           payAmount: pendingPlan.payAmount,
           bonusAmount: pendingPlan.bonusAmount,

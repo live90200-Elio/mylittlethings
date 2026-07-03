@@ -39,7 +39,10 @@ function doGet(e) {
     return json({ ok: true, service: "pet-grooming-credit-liff", ts: new Date().toISOString() });
   }
   if (action === "getMyCredit") {
-    return getMyCredit((e.parameter && e.parameter.liffUserId) || "");
+    // ⚠️ 安全修補（2026-07-04）：GET + 明文 liffUserId 可冒用他人身分撈餘額/電話/交易。
+    // 已改走 POST + LINE access token 驗證（見 doPost）。舊路徑僅回升級提示，不再服務查詢。
+    return json({ registered: false, error: "upgrade_required",
+      message: "頁面需更新，請關閉後從 LINE 選單重新開啟儲值頁。" });
   }
   if (action === "getPlans") {
     return getPlans();
@@ -53,6 +56,9 @@ function doPost(e) {
     if (!raw) return json({ error: "no_body" });
     const data = JSON.parse(raw);
 
+    if (data.action === "getMyCredit") {
+      return getMyCredit(data.token);
+    }
     if (data.action === "requestTopup") {
       return requestTopup(data);
     }
@@ -65,8 +71,17 @@ function doPost(e) {
 // ============================================================
 // API：撈客戶自己的儲值狀態
 // ============================================================
-function getMyCredit(liffUserId) {
-  if (!liffUserId) return json({ error: "missing_liffUserId" });
+function getMyCredit(token) {
+  // ⚠️ 安全修補（2026-07-04）：用 LINE access token 驗證身分，server 端取 userId，
+  // 不再信任前端傳入的 liffUserId（原本帶任一 userId 就能撈他人餘額/電話/交易）。
+  let profile;
+  try {
+    profile = verifyLineAccessToken_(token);
+  } catch (e) {
+    return json({ error: "unauthorized", message: "身分驗證失敗，請重新從 LINE 選單開啟。" });
+  }
+  const liffUserId = String(profile.userId || "").trim();
+  if (!liffUserId) return json({ error: "unauthorized" });
 
   const ident = lookupCustomerByLiffUserId(liffUserId);
   if (!ident) {
@@ -143,8 +158,15 @@ function getPlans() {
 // API：客戶申請儲值 → 推老闆 LINE + 寫 log
 // ============================================================
 function requestTopup(data) {
-  const liffUserId = String(data.liffUserId || "").trim();
-  if (!liffUserId) return json({ error: "missing_liffUserId" });
+  // ⚠️ 安全修補（2026-07-04）：驗證 LINE access token，用 verified userId，不信任前端傳入的 liffUserId
+  let profile;
+  try {
+    profile = verifyLineAccessToken_(data.token);
+  } catch (e) {
+    return json({ error: "unauthorized", message: "身分驗證失敗，請重新從 LINE 選單開啟。" });
+  }
+  const liffUserId = String(profile.userId || "").trim();
+  if (!liffUserId) return json({ error: "unauthorized" });
 
   const planName = String(data.planName || "").trim();
   const payAmount = Number(data.payAmount) || 0;
@@ -473,6 +495,19 @@ function parseAmount(s) {
     if (!isNaN(p)) { sum += p; any = true; }
   }
   return any ? sum : null;
+}
+
+// ⚠️ 安全（2026-07-04）：用 LINE access token 換 profile，驗證呼叫者身分。
+// 與「寵美查詢 API」同機制：token 有效（200）才回 profile（含真實 userId）。
+function verifyLineAccessToken_(token) {
+  if (!token) throw new Error("缺少 LINE access token");
+  const res = UrlFetchApp.fetch("https://api.line.me/v2/profile", {
+    method: "get",
+    headers: { Authorization: "Bearer " + token },
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) throw new Error("LINE 身分驗證失敗");
+  return JSON.parse(res.getContentText());
 }
 
 function json(obj) {
