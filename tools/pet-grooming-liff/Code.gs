@@ -371,19 +371,21 @@ function createContractPdf(phone, data, hashPayload, hash) {
   const blob = Utilities.newBlob(html, "text/html", "contract.html").getAs("application/pdf");
   blob.setName(filename);
   const file = folder.createFile(blob);
-  // ⚠️ 含個資+簽名。簽約「當下」維持憑連結檢視（客戶當場取件 + 老闆 LINE 通知直開都靠這條連結，
-  //    LINE 內建瀏覽器開 Drive 連結最穩）；超過 PDF_SHARE_HOURS 後由 revokeOldPdfSharing()
-  //    時間觸發器自動轉私有、連結失效（H4 收斂，2026-07-04）。
+  // ⚠️ 含個資+簽名。此行雖設 ANYONE_WITH_LINK，但實測（2026-07-04）Google 對個人帳號
+  //    並未實際開放匿名存取：匿名/他帳號開連結一律 401 要登入（歷史 191 檔全數 PRIVATE）。
+  //    ＝連結實際上只有檔案擁有者（邱帳號）開得了；客戶取件/老闆通知連結點開會看到「要求存取權」。
+  //    保險絲：revokeOldPdfSharing() 時間觸發器每 6 小時把 >24h 的檔案明確轉私有（防未來行為改變）。
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return file.getUrl();
 }
 
 // ======= H4：契約 PDF 分享權限自動收斂（2026-07-04）=======
-// 簽約當下 PDF 為「憑連結檢視」（取件窗口）；超過 PDF_SHARE_HOURS 後由時間觸發器轉私有：
-// 舊連結失效，檔案僅剩擁有者與 PDF_VIEWER_EMAILS（ScriptProperties，逗號分隔，選填）可看。
-// 啟用方式（GAS 編輯器手動跑一次，不需重新部署 Web App）：
-//   1. setupRevokeTrigger()  → 建立每 6 小時觸發器
-//   2. revokeOldPdfSharing() → 立即清一次（首次會把所有超過窗口的歷史 PDF 全部轉私有）
+// 健檢原憂慮「憑連結即可檢視」。實測結論（2026-07-04）：Drive 對個人帳號的
+// setSharing(ANYONE_WITH_LINK) 實際上沒有開放匿名存取（191 檔 getSharingAccess 全 PRIVATE、
+// 匿名 curl /view 回 401）→ 外洩風險本來就未成立，H4 以「本來就安全」結案。
+// 本觸發器保留當保險絲：若未來 Drive 行為改變、或有檔案被手動開分享，每 6 小時自動轉私有
+//（>24h 的檔案；PDF_VIEWER_EMAILS（ScriptProperties，逗號分隔，選填）可保留指定帳號檢視權）。
+// 啟用：setupRevokeTrigger() 建觸發器（2026-07-04 已建）；revokeOldPdfSharing() 可手動跑。
 const PDF_SHARE_HOURS = 24;
 
 function revokeOldPdfSharing() {
