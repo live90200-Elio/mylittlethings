@@ -18,9 +18,9 @@
 
 // ========== ⚠️ 必改區 ==========
 // 檔案 A 網址（既有客戶資料；只讀，不寫）— 跟 pet-grooming-liff 同一份
-const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit";
+const FILE_A_URL = "https://docs.google.com/spreadsheets/d/PASTE_FILE_A_SHEET_ID/edit";
 // 檔案 B 網址（新建的「寵物店儲值帳本」）
-const FILE_B_URL = "https://docs.google.com/spreadsheets/d/1yK6KNkOTJyaDiZMd5RxoZIDvOngQf6zgslN-H5Q-KaA/edit";
+const FILE_B_URL = "https://docs.google.com/spreadsheets/d/PASTE_FILE_B_SHEET_ID/edit";
 // ================================
 
 const SHEET_CUSTOMER = "客戶資料";        // 檔案 A

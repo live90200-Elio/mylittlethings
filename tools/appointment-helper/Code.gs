@@ -11,7 +11,7 @@
 
 // ========== ⚠️ 必改區 ==========
 // 檔案 A 網址（為了反查主人姓名）
-const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit";
+const FILE_A_URL = "https://docs.google.com/spreadsheets/d/PASTE_FILE_A_SHEET_ID/edit";
 // 想讀「特定日曆」而不是預設日曆時，填日曆名稱（例如 "寵美預約"）；留空＝預設日曆
 const CALENDAR_NAME = "";
 // ================================

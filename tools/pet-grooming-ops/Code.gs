@@ -13,7 +13,7 @@
  */
 
 // ========== ⚠️ 必改區（這份程式碼裡寫的是「設定常數」，不是密碼，可進 git） ==========
-const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit";
+const FILE_A_URL = "https://docs.google.com/spreadsheets/d/PASTE_FILE_A_SHEET_ID/edit";
 const SHEET_RECORD = "服務紀錄";
 const SHOP_NAME = "洗毛這件小事";
 // 健康檢查冷卻時間（毫秒）— 同一個故障 2 小時內只警報一次

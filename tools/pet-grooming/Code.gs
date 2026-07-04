@@ -25,7 +25,7 @@ const SHEET_NAME = "客戶資料";
 const SHEET_GUEST_LOG = "服務紀錄";  // 檔案 A 散客結單寫入目標
 
 // 檔案 B「寵物店儲值帳本」（跟 credit-liff Code.gs 同一個 URL）
-const FILE_B_URL = "https://docs.google.com/spreadsheets/d/1yK6KNkOTJyaDiZMd5RxoZIDvOngQf6zgslN-H5Q-KaA/edit";
+const FILE_B_URL = "https://docs.google.com/spreadsheets/d/PASTE_FILE_B_SHEET_ID/edit";
 const SHEET_LEDGER = "交易明細";
 const SHEET_MONTHLY = "包月客戶";
 const SHEET_CARD_TYPES = "卡別設定";  // 選用分頁：多卡別（洗澡卡/剪毛卡…）；不存在則退回下面的單卡常數

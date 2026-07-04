@@ -14,7 +14,7 @@
  */
 
 // ========== ⚠️ 必改區 ==========
-const FILE_A_URL = "https://docs.google.com/spreadsheets/d/1jkgtipEu0bsBcGU7yyeBl7_tZzdp5P9Iaezq1e6gq60/edit";
+const FILE_A_URL = "https://docs.google.com/spreadsheets/d/PASTE_FILE_A_SHEET_ID/edit";
 const PDF_FOLDER_ID = "1ECKKS3qsMwK1Vu-lmZ0PnMAcQW7nRSZx";
 // 店家資訊預設（沒設定分頁時用；建議改成填「契約設定」分頁）
 const SHOP_NAME = "洗毛這件小事";
