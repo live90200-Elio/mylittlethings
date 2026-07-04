@@ -392,22 +392,30 @@ function revokeOldPdfSharing() {
     .split(",").map((s) => s.trim()).filter(Boolean);
   const cutoff = Date.now() - PDF_SHARE_HOURS * 60 * 60 * 1000;
   const files = DriveApp.getFolderById(PDF_FOLDER_ID).getFiles();
-  let checked = 0, revoked = 0;
+  let checked = 0, revoked = 0, failed = 0, inWindow = 0;
+  const dist = {}; // 收斂前的分享狀態分佈（診斷用：正常應多為 ANYONE_WITH_LINK 或 PRIVATE）
   while (files.hasNext()) {
     const f = files.next();
     checked++;
-    if (f.getDateCreated().getTime() > cutoff) continue; // 還在取件窗口內
-    let access;
-    try { access = f.getSharingAccess(); } catch (e) { continue; } // 個別檔案讀權限失敗就跳過，不擋整批
-    if (access !== DriveApp.Access.ANYONE_WITH_LINK) continue;    // 只收斂憑連結公開的
-    f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-    keepEmails.forEach((em) => {
-      try { f.addViewer(em); } catch (e) { Logger.log("[revokePdf] addViewer " + em + " 失敗：" + e); }
-    });
-    revoked++;
+    if (f.getDateCreated().getTime() > cutoff) { inWindow++; continue; } // 還在取件窗口內
+    let before;
+    try { before = String(f.getSharingAccess()); }
+    catch (e) { before = "READ_ERR: " + String(e).substring(0, 80); }
+    dist[before] = (dist[before] || 0) + 1;
+    if (before === String(DriveApp.Access.PRIVATE)) continue; // 已私有，不重複動
+    try {
+      f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); // 狀態讀不到也照樣嘗試收斂
+      keepEmails.forEach((em) => {
+        try { f.addViewer(em); } catch (e2) { Logger.log("[revokePdf] addViewer " + em + " 失敗：" + e2); }
+      });
+      revoked++;
+    } catch (e) {
+      failed++;
+      if (failed <= 3) Logger.log("[revokePdf] " + f.getName() + " 收斂失敗：" + String(e).substring(0, 120));
+    }
   }
-  Logger.log("[revokePdfSharing] 檢查 " + checked + " 檔，轉私有 " + revoked + " 檔");
-  return { checked: checked, revoked: revoked };
+  Logger.log("[revokePdfSharing] 檢查 " + checked + " 檔（窗口內跳過 " + inWindow + "）；轉私有 " + revoked + "、失敗 " + failed + "；收斂前狀態分佈 " + JSON.stringify(dist));
+  return { checked: checked, revoked: revoked, failed: failed, dist: dist };
 }
 
 function setupRevokeTrigger() {
