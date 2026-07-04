@@ -15,7 +15,7 @@
 
 // ========== ⚠️ 必改區 ==========
 const FILE_A_URL = "https://docs.google.com/spreadsheets/d/PASTE_FILE_A_SHEET_ID/edit";
-const PDF_FOLDER_ID = "1ECKKS3qsMwK1Vu-lmZ0PnMAcQW7nRSZx";
+const PDF_FOLDER_ID = "PASTE_PDF_FOLDER_ID";
 // 店家資訊預設（沒設定分頁時用；建議改成填「契約設定」分頁）
 const SHOP_NAME = "洗毛這件小事";
 const SHOP_ADDRESS = "新竹市香山區中華路五段46號2樓";
@@ -37,9 +37,10 @@ function doGet(e) {
     return json({ ok: true, service: "pet-grooming-liff", ts: new Date().toISOString() });
   }
 
-  // 一人簽一次：前端進頁先查 userId 有沒有簽過
+  // 一人簽一次：前端進頁先查「登入者自己的 userId」有沒有簽過
+  // ⚠️ 安全（2026-07-04）：只接受 LINE userId 查詢，不再接受用電話查他人（原本可用可枚舉的電話撈個資）
   if (p.check) {
-    return json(findExistingContract(String(p.check), p.checkPhone ? String(p.checkPhone) : ""));
+    return json(findExistingContract(String(p.check)));
   }
 
   // 給前端：店家政策設定
@@ -55,10 +56,16 @@ function doGet(e) {
   return json({ ok: true, service: "pet-grooming-liff", note: "API only; HTML served by GitHub Pages" });
 }
 
-// ======= 一人簽一次：用 userId（優先）或電話查「契約紀錄」最近一筆 =======
-function findExistingContract(userId, phoneRaw) {
+// ======= 一人簽一次：用「LINE userId」查「契約紀錄」最近一筆 =======
+// ⚠️ 安全修補（2026-07-04）：
+//   1. 只接受合法 LINE userId（U+32hex）查詢；電話等亂猜參數一律回 signed:false（擋電話枚舉撈個資）。
+//   2. 移除用電話查他人的分支（原本知道任一電話就能查到姓名/寵物名/契約）。
+//   3. 回傳不再含 pdfUrl，契約 PDF 連結不透過查詢端點外洩（配合契約 PDF 權限一併收斂）。
+function findExistingContract(userId) {
   try {
-    const phone = normalizePhone(phoneRaw);
+    const uid = String(userId || "").trim();
+    // 只允許合法 LINE userId 格式，擋掉用電話/亂猜參數枚舉
+    if (!/^U[0-9a-f]{32}$/i.test(uid)) return { ok: true, signed: false };
     const file = SpreadsheetApp.openByUrl(FILE_A_URL);
     const sheet = file.getSheetByName(SHEET_CONTRACT);
     if (!sheet) return { ok: true, signed: false };
@@ -67,10 +74,7 @@ function findExistingContract(userId, phoneRaw) {
     let found = null;
     for (let i = 1; i < vals.length; i++) {
       const rowUid = String(vals[i][8] || "").trim();
-      const rowPhone = normalizePhone(vals[i][1]);
-      const matchUid = userId && rowUid && rowUid === userId;
-      const matchPhone = phone && rowPhone && rowPhone === phone;
-      if (matchUid || matchPhone) found = vals[i]; // 取最後一筆（最近）
+      if (rowUid && rowUid === uid) found = vals[i]; // 取最後一筆（最近）
     }
     if (!found) return { ok: true, signed: false };
     const ts = found[0];
@@ -82,7 +86,6 @@ function findExistingContract(userId, phoneRaw) {
       signedAt: signedAt,
       name: String(found[2] || ""),
       petName: String(found[3] || ""),
-      pdfUrl: String(found[6] || ""),
     };
   } catch (err) {
     Logger.log("[findExistingContract] " + err);
@@ -368,9 +371,51 @@ function createContractPdf(phone, data, hashPayload, hash) {
   const blob = Utilities.newBlob(html, "text/html", "contract.html").getAs("application/pdf");
   blob.setName(filename);
   const file = folder.createFile(blob);
-  // ⚠️ 含個資+簽名，憑連結即可檢視。沿用 v1；之後可改更嚴格權限。
+  // ⚠️ 含個資+簽名。簽約「當下」維持憑連結檢視（客戶當場取件 + 老闆 LINE 通知直開都靠這條連結，
+  //    LINE 內建瀏覽器開 Drive 連結最穩）；超過 PDF_SHARE_HOURS 後由 revokeOldPdfSharing()
+  //    時間觸發器自動轉私有、連結失效（H4 收斂，2026-07-04）。
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return file.getUrl();
+}
+
+// ======= H4：契約 PDF 分享權限自動收斂（2026-07-04）=======
+// 簽約當下 PDF 為「憑連結檢視」（取件窗口）；超過 PDF_SHARE_HOURS 後由時間觸發器轉私有：
+// 舊連結失效，檔案僅剩擁有者與 PDF_VIEWER_EMAILS（ScriptProperties，逗號分隔，選填）可看。
+// 啟用方式（GAS 編輯器手動跑一次，不需重新部署 Web App）：
+//   1. setupRevokeTrigger()  → 建立每 6 小時觸發器
+//   2. revokeOldPdfSharing() → 立即清一次（首次會把所有超過窗口的歷史 PDF 全部轉私有）
+const PDF_SHARE_HOURS = 24;
+
+function revokeOldPdfSharing() {
+  const props = PropertiesService.getScriptProperties();
+  const keepEmails = String(props.getProperty("PDF_VIEWER_EMAILS") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const cutoff = Date.now() - PDF_SHARE_HOURS * 60 * 60 * 1000;
+  const files = DriveApp.getFolderById(PDF_FOLDER_ID).getFiles();
+  let checked = 0, revoked = 0;
+  while (files.hasNext()) {
+    const f = files.next();
+    checked++;
+    if (f.getDateCreated().getTime() > cutoff) continue; // 還在取件窗口內
+    let access;
+    try { access = f.getSharingAccess(); } catch (e) { continue; } // 個別檔案讀權限失敗就跳過，不擋整批
+    if (access !== DriveApp.Access.ANYONE_WITH_LINK) continue;    // 只收斂憑連結公開的
+    f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    keepEmails.forEach((em) => {
+      try { f.addViewer(em); } catch (e) { Logger.log("[revokePdf] addViewer " + em + " 失敗：" + e); }
+    });
+    revoked++;
+  }
+  Logger.log("[revokePdfSharing] 檢查 " + checked + " 檔，轉私有 " + revoked + " 檔");
+  return { checked: checked, revoked: revoked };
+}
+
+function setupRevokeTrigger() {
+  const fn = "revokeOldPdfSharing";
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === fn);
+  if (exists) { Logger.log("[setupRevokeTrigger] 觸發器已存在，略過"); return; }
+  ScriptApp.newTrigger(fn).timeBased().everyHours(6).create();
+  Logger.log("[setupRevokeTrigger] 已建立每 6 小時觸發器：" + fn);
 }
 
 // ======= PDF 模板 A：官方定型化契約（基本資料表 + 22條 + 雙方簽名）=======
@@ -601,7 +646,7 @@ function pushLine(text) {
 }
 
 // ======= 測試用（編輯器手動跑）=======
-function testCheck() { Logger.log(findExistingContract("TEST_USER", "").signed); }
+function testCheck() { Logger.log(findExistingContract("U00000000000000000000000000000000").signed); }
 function testConfig() { Logger.log(JSON.stringify(getContractConfig())); }
 function testDoPost() {
   const sig = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
