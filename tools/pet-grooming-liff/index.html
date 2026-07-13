@@ -188,21 +188,28 @@
           <input type="text" id="petName" placeholder="例如：小白" required>
         </div>
         <div class="field">
-          <label>品種</label>
-          <input type="text" id="petBreed" placeholder="例如：馬爾濟斯">
+          <label>品種 <span class="req">*</span></label>
+          <input type="text" id="petBreed" placeholder="例如：馬爾濟斯" required>
         </div>
       </div>
       <div class="grid2">
         <div class="field">
-          <label>年齡</label>
-          <input type="text" id="petAge" placeholder="例如：3歲 / 8個月">
+          <label>年齡 <span class="req">*</span></label>
+          <input type="text" id="petAge" placeholder="例如：3歲 / 8個月" required>
         </div>
         <div class="field">
-          <label>性別</label>
+          <label>性別 <span class="req">*</span></label>
           <div class="checks" id="petGender">
             <label class="check-item"><input type="radio" name="petGender" value="公"> 公</label>
             <label class="check-item"><input type="radio" name="petGender" value="母"> 母</label>
           </div>
+        </div>
+      </div>
+      <div class="field">
+        <label>犬或貓 <span class="req">*</span></label>
+        <div class="checks" id="petSpecies">
+          <label class="check-item"><input type="radio" name="petSpecies" value="犬"> 犬</label>
+          <label class="check-item"><input type="radio" name="petSpecies" value="貓"> 貓</label>
         </div>
       </div>
       <div class="field">
@@ -316,12 +323,14 @@
     cb.addEventListener("change", sync);
   });
 
-  // --- 性別 radio 勾選狀態樣式（同組只有一個 .on） ---
-  document.querySelectorAll("#petGender .check-item").forEach((el) => {
-    const rb = el.querySelector("input");
-    rb.addEventListener("change", () => {
-      document.querySelectorAll("#petGender .check-item").forEach((x) => x.classList.remove("on"));
-      if (rb.checked) el.classList.add("on");
+  // --- radio 勾選狀態樣式（同組只有一個 .on）：性別、犬或貓 ---
+  ["petGender", "petSpecies"].forEach((groupId) => {
+    document.querySelectorAll("#" + groupId + " .check-item").forEach((el) => {
+      const rb = el.querySelector("input");
+      rb.addEventListener("change", () => {
+        document.querySelectorAll("#" + groupId + " .check-item").forEach((x) => x.classList.remove("on"));
+        if (rb.checked) el.classList.add("on");
+      });
     });
   });
 
@@ -403,6 +412,8 @@
     const petAge = $("petAge").value.trim();
     const petGenderEl = document.querySelector('input[name="petGender"]:checked');
     const petGender = petGenderEl ? petGenderEl.value : "";
+    const petSpeciesEl = document.querySelector('input[name="petSpecies"]:checked');
+    const petSpecies = petSpeciesEl ? petSpeciesEl.value : "";
     const remark = $("remark").value.trim();
     const amount = $("amount").value.trim();
     const services = [...document.querySelectorAll("#services input:checked")].map((c) => c.value);
@@ -411,6 +422,10 @@
     if (!name) return toast("請填寫客戶姓名", true);
     if (!phone) return toast("電話格式錯誤（請填 09 開頭 10 碼）", true);
     if (!petName) return toast("請填寫寵物名", true);
+    if (!breed) return toast("請填寫品種", true);
+    if (!petAge) return toast("請填寫年齡", true);
+    if (!petGender) return toast("請選擇性別", true);
+    if (!petSpecies) return toast("請選擇犬或貓", true);
     if (!agreed) return toast("請閱讀並同意注意事項", true);
     if (!signaturePad || signaturePad.isEmpty()) return toast("請簽名", true);
 
@@ -422,7 +437,8 @@
       name,
       phone,
       petName,
-      breed,
+      petSpecies,
+      breed: petSpecies ? petSpecies + "／" + breed : breed,
       petAge,
       petGender,
       remark,
