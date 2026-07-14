@@ -386,10 +386,10 @@
         envNote.textContent = "✅ LINE 已登入：" + liffProfile.displayName;
         if (!$("customerName").value) $("customerName").value = liffProfile.displayName || "";
       } catch (e) {
-        envNote.textContent = "⚠️ 無法取得 LINE 個人資料（可能需要加好友）";
+        envNote.textContent = "⚠️ 無法取得 LINE 個人資料，請關閉此頁後從 LINE 重新開啟";
       }
     } catch (e) {
-      envNote.textContent = "⚠️ LIFF 初始化失敗：" + (e.message || e);
+      envNote.textContent = "⚠️ LINE 連線失敗，請關閉此頁後從 LINE 重新開啟";
       console.error(e);
     }
   }
@@ -429,6 +429,13 @@
     if (!agreed) return toast("請閱讀並同意注意事項", true);
     if (!signaturePad || signaturePad.isEmpty()) return toast("請簽名", true);
 
+    // 後端要求 liffUserId 必填；抓不到 LINE 身分時在這裡就擋下並重試初始化，
+    // 不要讓客戶送出後才被後端退回看不懂的錯誤碼
+    if (!liffProfile || !liffProfile.userId) {
+      initLiff(); // 背景重試一次，若成功下次按送出就會過
+      return toast("無法取得您的 LINE 身分，請關閉此頁後，從 LINE 重新點開連結再填一次", true);
+    }
+
     const signatureDataUrl = signaturePad.toDataURL("image/png");
 
     const payload = {
@@ -461,7 +468,7 @@
         body: JSON.stringify(payload),
       });
       const result = await res.json();
-      if (result.error) throw new Error(result.error);
+      if (result.error) throw new Error(friendlyError(result));
 
       // 切成功畫面
       $("form-view").style.display = "none";
@@ -470,10 +477,29 @@
       else $("pdfLink").style.display = "none";
     } catch (err) {
       console.error(err);
-      toast("送出失敗：" + (err.message || err), true);
+      let msg = String((err && err.message) || err);
+      // fetch 網路層錯誤（斷線/逾時）的原文是英文，翻成客戶看得懂的
+      if (/failed to fetch|networkerror|load failed|timeout/i.test(msg)) {
+        msg = "網路連線不穩，資料沒有送出，請確認訊號後再按一次送出";
+      }
+      toast("送出失敗：" + msg, true);
       btn.disabled = false;
       btn.textContent = "送出";
     }
+  }
+
+  // 把後端錯誤碼翻成客戶看得懂的中文
+  function friendlyError(result) {
+    const map = {
+      missing_liffUserId: "無法取得您的 LINE 身分，請關閉此頁後，從 LINE 重新點開連結再填一次",
+      missing_name: "請填寫客戶姓名",
+      missing_phone: "請填寫電話",
+      missing_petName: "請填寫寵物名",
+      missing_signaturePng: "請簽名",
+      invalid_phone: "電話格式錯誤（請填 09 開頭 10 碼）",
+      no_body: "系統沒有收到資料，請再按一次送出",
+    };
+    return map[result.error] || result.message || result.error;
   }
 </script>
 </body>
