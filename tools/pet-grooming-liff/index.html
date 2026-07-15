@@ -431,7 +431,9 @@
 
     // 後端要求 liffUserId 必填；抓不到 LINE 身分時在這裡就擋下並重試初始化，
     // 不要讓客戶送出後才被後端退回看不懂的錯誤碼
-    if (!liffProfile || !liffProfile.userId) {
+    let liffAccessToken = "";
+    try { liffAccessToken = liff.getAccessToken() || ""; } catch (e) {}
+    if (!liffProfile || !liffProfile.userId || !liffAccessToken) {
       initLiff(); // 背景重試一次，若成功下次按送出就會過
       return toast("無法取得您的 LINE 身分，請關閉此頁後，從 LINE 重新點開連結再填一次", true);
     }
@@ -440,6 +442,7 @@
 
     const payload = {
       liffUserId: liffProfile ? liffProfile.userId : "",
+      liffAccessToken,
       liffDisplayName: liffProfile ? liffProfile.displayName : "",
       name,
       phone,

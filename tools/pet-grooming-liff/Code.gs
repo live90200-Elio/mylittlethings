@@ -28,6 +28,7 @@ const SHEET_CUSTOMER = "客戶資料";
 const SHEET_CONTRACT = "契約紀錄";
 const SHEET_NOTIFY_LOG = "簽約通知 log";
 const SHEET_CONFIG = "契約設定";
+const LINE_LOGIN_CHANNEL_ID = "2009881783"; // LIFF 所屬 LINE Login Channel ID（公開識別碼）
 
 // ======= doGet：健康檢查 / 一人簽一次查詢 / 設定 / 契約全文 =======
 function doGet(e) {
@@ -205,12 +206,15 @@ function doPost(e) {
     const data = JSON.parse(raw);
 
     // --- 必填驗證（基本資料表其餘欄位全選填）---
-    const required = ["name", "phone", "petName", "signaturePng", "liffUserId"];
+    const required = ["name", "phone", "petName", "signaturePng", "liffUserId", "liffAccessToken"];
     for (const f of required) {
       if (!data[f]) return json({ error: `missing_${f}`, message: `缺少必填：${f}` });
     }
     const phone = normalizePhone(data.phone);
     if (!phone) return json({ error: "invalid_phone", message: "電話格式錯誤" });
+    const verifiedUserId = verifyLineAccessToken(data.liffAccessToken, data.liffUserId);
+    if (!verifiedUserId) return json({ error: "invalid_line_access_token", message: "LINE 登入已失效，請從 LINE 重新開啟表單" });
+    data.liffUserId = verifiedUserId;
 
     // --- 算哈希（含基本資料表欄位，排除 signaturePng）---
     const hashPayload = {
@@ -230,13 +234,18 @@ function doPost(e) {
     const hash = sha256(JSON.stringify(hashPayload));
 
     upsertCustomer(phone, data, hashPayload);
-    const pdfUrl = createContractPdf(phone, data, hashPayload, hash);
+    const pdf = createContractPdf(phone, data, hashPayload, hash);
+    const pdfUrl = pdf.file.getUrl();
     appendContractRecord(phone, data, pdfUrl, hash);
 
     try { notifyBossNewContract(data, phone, pdfUrl); }
     catch (notifyErr) { Logger.log("[notifyBoss] " + String(notifyErr)); }
 
-    return json({ ok: true, pdfUrl: pdfUrl, hash: hash });
+    let emailed = false;
+    try { emailed = emailContractPdf(data, pdf.file); }
+    catch (mailErr) { Logger.log("[emailContractPdf] " + String(mailErr)); }
+
+    return json({ ok: true, pdfUrl: pdfUrl, hash: hash, emailed: emailed });
   } catch (err) {
     return json({ error: String((err && err.message) || err) });
   }
@@ -371,12 +380,84 @@ function createContractPdf(phone, data, hashPayload, hash) {
   const blob = Utilities.newBlob(html, "text/html", "contract.html").getAs("application/pdf");
   blob.setName(filename);
   const file = folder.createFile(blob);
-  // ⚠️ 含個資+簽名。此行雖設 ANYONE_WITH_LINK，但實測（2026-07-04）Google 對個人帳號
-  //    並未實際開放匿名存取：匿名/他帳號開連結一律 401 要登入（歷史 191 檔全數 PRIVATE）。
-  //    ＝連結實際上只有檔案擁有者（邱帳號）開得了；客戶取件/老闆通知連結點開會看到「要求存取權」。
-  //    保險絲：revokeOldPdfSharing() 時間觸發器每 6 小時把 >24h 的檔案明確轉私有（防未來行為改變）。
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return file.getUrl();
+  // 含個資+簽名：明確維持 PRIVATE，只對 PDF_VIEWER_EMAILS 中的店家帳號授權。
+  file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  ensurePdfViewers(file, getPdfViewerEmails());
+  return { file: file };
+}
+
+function getPdfViewerEmails() {
+  return String(PropertiesService.getScriptProperties().getProperty("PDF_VIEWER_EMAILS") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function ensurePdfViewers(file, emails) {
+  if (!emails.length) return 0;
+  const existing = {};
+  try {
+    file.getViewers().forEach((user) => { existing[String(user.getEmail()).toLowerCase()] = true; });
+  } catch (err) {
+    Logger.log("[ensurePdfViewers] 讀取 viewer 失敗：" + String(err));
+  }
+  let added = 0;
+  emails.forEach((email) => {
+    const key = email.toLowerCase();
+    if (existing[key]) return;
+    try {
+      file.addViewer(email);
+      existing[key] = true;
+      added++;
+    } catch (err) {
+      Logger.log("[ensurePdfViewers] addViewer 失敗：" + String(err));
+    }
+  });
+  return added;
+}
+
+function verifyLineAccessToken(accessToken, claimedUserId) {
+  const token = String(accessToken || "").trim();
+  if (!token || !claimedUserId) return "";
+  try {
+    const verifyRes = UrlFetchApp.fetch(
+      "https://api.line.me/oauth2/v2.1/verify?access_token=" + encodeURIComponent(token),
+      { muteHttpExceptions: true }
+    );
+    if (verifyRes.getResponseCode() !== 200) return "";
+    const verified = JSON.parse(verifyRes.getContentText());
+    if (String(verified.client_id) !== LINE_LOGIN_CHANNEL_ID || Number(verified.expires_in) <= 0) return "";
+
+    const profileRes = UrlFetchApp.fetch("https://api.line.me/v2/profile", {
+      headers: { Authorization: "Bearer " + token },
+      muteHttpExceptions: true,
+    });
+    if (profileRes.getResponseCode() !== 200) return "";
+    const profile = JSON.parse(profileRes.getContentText());
+    return String(profile.userId || "") === String(claimedUserId) ? String(profile.userId) : "";
+  } catch (err) {
+    Logger.log("[verifyLineAccessToken] " + String(err));
+    return "";
+  }
+}
+
+function emailContractPdf(data, file) {
+  const email = String(data.email || "").trim();
+  if (!email) return false;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    Logger.log("[emailContractPdf] email 格式不合法，略過寄送");
+    return false;
+  }
+  const petName = String(data.petName || "毛孩");
+  const subject = "洗毛這件小事｜" + petName + " 的寵物美容契約";
+  const body = "您好，附件是您剛完成簽署的寵物美容契約 PDF，請妥善保存。\n\n洗毛這件小事";
+  MailApp.sendEmail({
+    to: email,
+    subject: subject,
+    body: body,
+    htmlBody: "<p>您好，</p><p>附件是您剛完成簽署的寵物美容契約 PDF，請妥善保存。</p><p>洗毛這件小事</p>",
+    attachments: [file.getBlob().setName(file.getName())],
+    name: "洗毛這件小事",
+  });
+  return true;
 }
 
 // ======= H4：契約 PDF 分享權限自動收斂（2026-07-04）=======
@@ -389,9 +470,7 @@ function createContractPdf(phone, data, hashPayload, hash) {
 const PDF_SHARE_HOURS = 24;
 
 function revokeOldPdfSharing() {
-  const props = PropertiesService.getScriptProperties();
-  const keepEmails = String(props.getProperty("PDF_VIEWER_EMAILS") || "")
-    .split(",").map((s) => s.trim()).filter(Boolean);
+  const keepEmails = getPdfViewerEmails();
   const cutoff = Date.now() - PDF_SHARE_HOURS * 60 * 60 * 1000;
   const files = DriveApp.getFolderById(PDF_FOLDER_ID).getFiles();
   let checked = 0, revoked = 0, failed = 0, inWindow = 0;
@@ -404,13 +483,12 @@ function revokeOldPdfSharing() {
     try { before = String(f.getSharingAccess()); }
     catch (e) { before = "READ_ERR: " + String(e).substring(0, 80); }
     dist[before] = (dist[before] || 0) + 1;
-    if (before === String(DriveApp.Access.PRIVATE)) continue; // 已私有，不重複動
     try {
-      f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); // 狀態讀不到也照樣嘗試收斂
-      keepEmails.forEach((em) => {
-        try { f.addViewer(em); } catch (e2) { Logger.log("[revokePdf] addViewer " + em + " 失敗：" + e2); }
-      });
-      revoked++;
+      if (before !== String(DriveApp.Access.PRIVATE)) {
+        f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); // 狀態讀不到也照樣嘗試收斂
+        revoked++;
+      }
+      ensurePdfViewers(f, keepEmails);
     } catch (e) {
       failed++;
       if (failed <= 3) Logger.log("[revokePdf] " + f.getName() + " 收斂失敗：" + String(e).substring(0, 120));
@@ -658,7 +736,8 @@ function pushLine(text) {
 // ======= 測試用（編輯器手動跑）=======
 function testCheck() { Logger.log(findExistingContract("U00000000000000000000000000000000").signed); }
 function testConfig() { Logger.log(JSON.stringify(getContractConfig())); }
-function testDoPost() {
+// 安全測試：不提供真實 access token，預期回 missing_liffAccessToken；成功 E2E 必須從真 LIFF 執行。
+function testDoPostRejectsMissingLineToken() {
   const sig = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
   const body = JSON.stringify({
     name: "測試客戶", phone: "0912345678", petName: "測試寵物", petSpecies: "犬", breed: "米克斯",

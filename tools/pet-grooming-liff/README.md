@@ -1,12 +1,12 @@
 # 寵美客戶 LIFF 表單（V1）
 
-> 客戶在 LINE 內自助填寫寵美資訊 + 簽名，自動寫入 Google Sheets 並產 PDF 契約存 Drive。
+> 客戶在 LINE 內自助填寫寵美資訊 + 簽名，自動寫入 Google Sheets、產 PDF 契約存 Drive，並可寄送 PDF 附件到客戶填寫的 Email。
 
 ## 🎯 解決什麼痛點
 
 - **老闆不用再手動建客戶檔** — 客戶自己填，送出就寫進檔案 A 的「客戶資料」工作表，員工查詢頁立刻看得到
 - **契約留下合法紀錄** — 每筆送出會產 PDF（內含簽名 + 時間戳 + SHA-256 哈希）存 Drive，未來有爭議可驗證
-- **老闆只要傳連結給客戶** — 支援 LINE Rich Menu 按鈕一鍵開啟
+- **PDF 安全交付** — Drive 原檔維持 PRIVATE；店家用具名 Google 帳號開啟，客戶可從 Email 附件取件
 
 ## 📦 檔案
 
@@ -31,25 +31,27 @@ Apps Script Code.gs doPost:
   ① 驗證必填（含 liffUserId，沒登入 LINE 送不進來）
   ② 算 SHA-256 哈希（防竄改）
   ③ Upsert「客戶資料」工作表（電話 key）
-  ④ 產 PDF（HTML → PDF）存 Drive 指定資料夾
-  ⑤ 寫「契約紀錄」工作表
-  ⑥ 回傳 PDF 連結
+  ④ 產 PDF（HTML → PDF）存 Drive 指定資料夾並維持 PRIVATE
+  ⑤ 授權 PDF_VIEWER_EMAILS 中的店家帳號檢視
+  ⑥ 寫「契約紀錄」工作表
+  ⑦ 若客戶填 Email，寄送 PDF 附件
   ↓
-LIFF 顯示「已送出」+ PDF 連結
+LIFF 顯示「已送出」及 Email 寄送狀態
 ```
 
 ## 🔐 安全設計
 
-- **必填 `liffUserId`**：前端取自 `liff.getProfile()`，只有真的在 LINE 內開啟過 LIFF 的使用者才拿得到。直接打 API 沒帶 userId 會被擋。
+- **LINE 身分後端驗證**：前端同時送 `liffUserId` 與 `liff.getAccessToken()`；後端向 LINE 驗證 token 的 Channel ID、有效期限與 profile userId，匿名偽造請求會被擋。
 - **`LIFF_ID` 本來就是公開資訊**：在 LINE Developers Console 就能查到，不是機密。
 - **Apps Script `/exec` URL 可公開**：Web App 寫死「所有人」可打，但 API 內容只回 JSON 狀態，拿到 URL 也打不壞什麼。
 - **資料完整性**：每筆契約算 SHA-256 存到 Sheets，日後可驗 Drive PDF 是否被改。
+- **PDF 不公開**：Drive 原檔明確設為 PRIVATE；`PDF_VIEWER_EMAILS`（Script Property，逗號分隔）只授權指定店家 Google 帳號。
+- **客戶取件不靠公開連結**：若客戶填 Email，後端寄送 PDF 附件；寄信失敗不會回滾已完成的簽約。
 - **LINE userId**：僅供紀錄追溯，不作為身份驗證依據。
 
 ## ⚠️ V1 限制（已知）
 
 - **沒有美容師簽名** — 契約 PDF 只有客戶簽名，美容師簽名欄留白（現場補紙本或 V2 補做）
-- **沒有 LINE Access Token 後端驗證** — 只靠前端帶 `liffUserId`，不擋惡意偽造。V2 可加 `liff.getAccessToken()` + 後端驗 token
 - **PDF 字型依賴 Apps Script 內建** — 中文若出問題需調整 font-family
 - **不支援修改已送出的契約** — 一律 append-only，改需重新送一筆（哈希會變）
 
