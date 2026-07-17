@@ -155,6 +155,11 @@
 
   <div id="errorBox"></div>
 
+  <section id="pendingSection" hidden>
+    <h2 class="warn">🚨 待確認預約申請</h2>
+    <div id="pendingList"></div>
+  </section>
+
   <section>
     <h2>📋 員工清單（貼到員工群組）</h2>
     <div class="card">
@@ -198,6 +203,8 @@ const dateLabel = document.getElementById("dateLabel");
 const staffContent = document.getElementById("staffContent");
 const copyStaffBtn = document.getElementById("copyStaffBtn");
 const remindersList = document.getElementById("remindersList");
+const pendingSection = document.getElementById("pendingSection");
+const pendingList = document.getElementById("pendingList");
 const missingSection = document.getElementById("missingSection");
 const missingList = document.getElementById("missingList");
 
@@ -293,17 +300,28 @@ function renderAll(d) {
   currentData = d;
 
   const dw = d.dayWord || "明天";
-  dateLabel.innerHTML = `<strong>${escapeHtml(dw)} ${escapeHtml(d.dateLabel)} (${escapeHtml(d.weekday)})</strong> · <span class="sub">${d.totalCount} 件預約</span>`;
+  const confirmedCount = Number.isFinite(d.confirmedCount) ? d.confirmedCount : (d.totalCount || 0);
+  const pendingCount = Number.isFinite(d.pendingCount) ? d.pendingCount : 0;
+  dateLabel.innerHTML = `<strong>${escapeHtml(dw)} ${escapeHtml(d.dateLabel)} (${escapeHtml(d.weekday)})</strong> · <span class="sub">正式 ${confirmedCount}｜待確認 ${pendingCount}</span>`;
+
+  // 待確認申請（不得混入正式預約與客戶提醒）
+  if (d.pendingRequests && d.pendingRequests.length > 0) {
+    pendingSection.hidden = false;
+    pendingList.innerHTML = d.pendingRequests.map(renderPendingCard).join("");
+  } else {
+    pendingSection.hidden = true;
+    pendingList.innerHTML = "";
+  }
 
   // 員工清單
   staffContent.textContent = d.staffSummary || "(無)";
-  copyStaffBtn.disabled = !d.staffSummary || d.totalCount === 0;
+  copyStaffBtn.disabled = !d.staffSummary || confirmedCount === 0;
   copyStaffBtn.classList.remove("copied");
   copyStaffBtn.textContent = "📋 複製全部";
 
   // 客戶提醒
   if (!d.reminders || d.reminders.length === 0) {
-    remindersList.innerHTML = `<div class="empty-state">${d.totalCount === 0 ? "明天無預約 🌿" : "（沒有可自動提醒的客戶 — 請看下方手動處理區）"}</div>`;
+    remindersList.innerHTML = `<div class="empty-state">${confirmedCount === 0 ? "明天無正式預約 🌿" : "（沒有可自動提醒的客戶 — 請看下方手動處理區）"}</div>`;
   } else {
     remindersList.innerHTML = d.reminders.map(renderReminderCard).join("");
     bindCopyButtons();
@@ -317,6 +335,18 @@ function renderAll(d) {
     missingSection.hidden = true;
     missingList.innerHTML = "";
   }
+}
+
+function renderPendingCard(p) {
+  const cut = p.isHaircut ? " ✂️" : "";
+  const owner = p.displayOwner || "無客戶資料";
+  const phone = p.phone ? `📞 ${formatPhone(p.phone)}` : "⚠️ 無聯絡電話";
+  return `
+    <div class="missing-card">
+      <strong>${escapeHtml(p.petName)}${cut}</strong> · ${escapeHtml(p.time)} · ${escapeHtml(p.service)}
+      <div class="reason">${escapeHtml(owner)} · ${escapeHtml(phone)}</div>
+      <div class="reason">尚未成立。確認後請在 Google 日曆把「狀態：待確認」改成「狀態：已確認」。</div>
+    </div>`;
 }
 
 function renderReminderCard(r) {

@@ -66,9 +66,12 @@ function doGet(e) {
     // 「明天 / 今天 / 某日」智慧詞彙
     const dayWord = dayWordFor(target);
 
-    const staffSummary = buildStaffSummary(parsed, dateStr, weekdayStr, dayWord);
+    const confirmedEvents = parsed.filter((p) => p.status === "confirmed");
+    const pendingEvents = parsed.filter((p) => p.status === "pending");
+    const staffSummary = buildStaffSummary(confirmedEvents, dateStr, weekdayStr, dayWord);
+    const pendingSummary = buildPendingSummary(pendingEvents, dateStr, weekdayStr, dayWord);
 
-    const reminders = parsed
+    const reminders = confirmedEvents
       .filter((p) => p.phone && p.ownerName)
       .map((p) => ({
         phone: p.phone,
@@ -80,24 +83,35 @@ function doGet(e) {
         message: buildReminderMessage(p, dateStr, weekdayStr, dayWord),
       }));
 
-    const missingPhone = parsed
-      .filter((p) => !p.phone || !p.ownerName)
+    const missingPhone = confirmedEvents
+      .filter((p) => p.needsManualContact)
       .map((p) => ({
         petName: p.petName,
         time: p.timeLabel,
         service: p.service,
         isHaircut: p.isHaircut,
-        reason: !p.phone ? "描述欄無電話" : "電話不在客戶資料",
+        reason: !p.phone ? "客戶自助申請缺少電話" : "電話不在客戶資料",
         phone: p.phone,
       }));
 
+    const confirmedAppointments = confirmedEvents.map(toAppointmentData);
+    const pendingRequests = pendingEvents.map(toAppointmentData);
+
     return json({
+      schemaVersion: 2,
       date: formatISODate(target),
       dateLabel: dateStr,
       weekday: weekdayStr,
       dayWord: dayWord,
-      totalCount: parsed.length,
+      allCount: parsed.length,
+      // 保留 legacy 欄位，但從 v2 起只代表「已確認」，避免舊前端把待確認當正式預約。
+      totalCount: confirmedEvents.length,
+      confirmedCount: confirmedEvents.length,
+      pendingCount: pendingEvents.length,
       staffSummary: staffSummary,
+      pendingSummary: pendingSummary,
+      confirmedAppointments: confirmedAppointments,
+      pendingRequests: pendingRequests,
       reminders: reminders,
       missingPhone: missingPhone,
       generatedAt: new Date().toISOString(),
@@ -132,11 +146,24 @@ function parseEvent(ev, customerMap) {
   const isHaircut = CUT_PATTERN.test(title);
   const service = isHaircut ? "剪毛" : "洗澡";
   // 去掉標題裡的 ✂️/剪 字樣，留下乾淨寵物名
-  const petName = title.replace(/✂️|✂|剪/g, "").trim() || "(無寵物名)";
+  const cleanTitle = title
+    .replace(/^\s*⏳\s*待確認\s*[｜|]\s*/, "")
+    .replace(/^\s*\[待確認\]\s*/, "")
+    .replace(/^\s*✅\s*已確認\s*[｜|]\s*/, "")
+    .replace(/^\s*\[已確認\]\s*/, "");
+  const petName = cleanTitle.replace(/✂️|✂|剪/g, "").trim() || "(無寵物名)";
 
   const description = ev.getDescription() || "";
   const phone = extractPhone(description);
-  const ownerName = phone ? (customerMap[phone] || "") : "";
+  const explicitOwner = extractDescriptionField(description, "主人");
+  const ownerName = explicitOwner || (phone ? (customerMap[phone] || "") : "");
+  const sourceField = extractDescriptionField(description, "來源");
+  const statusField = extractDescriptionField(description, "狀態");
+  // 只有新制明確標記「客戶自助」才算自助來源；舊事件一律相容為店家手動／已確認。
+  const source = /客戶自助/.test(sourceField) ? "customer_self" : "manual";
+  const status = /待確認/.test(statusField) ? "pending" : "confirmed";
+  const displayOwner = ownerName || (source === "manual" ? "店家手動" : "無客戶資料");
+  const noPhone = !phone && source === "manual";
 
   return {
     startMs: start.getTime(),
@@ -146,6 +173,36 @@ function parseEvent(ev, customerMap) {
     isHaircut: isHaircut,
     phone: phone,
     ownerName: ownerName,
+    displayOwner: displayOwner,
+    source: source,
+    status: status,
+    noPhone: noPhone,
+    // 店家手動建立且無電話是合法預約；但若有電話卻查不到主人，仍保留既有人工核對警告。
+    needsManualContact: (!phone && source === "customer_self") || (!!phone && !ownerName),
+  };
+}
+
+function extractDescriptionField(text, wantedLabel) {
+  const lines = String(text || "").split(/\r?\n/);
+  for (const line of lines) {
+    const match = line.match(/^\s*([^：:]+)\s*[：:]\s*(.*?)\s*$/);
+    if (match && match[1].trim() === wantedLabel) return match[2].trim();
+  }
+  return "";
+}
+
+function toAppointmentData(p) {
+  return {
+    time: p.timeLabel,
+    petName: p.petName,
+    service: p.service,
+    isHaircut: p.isHaircut,
+    phone: p.phone,
+    ownerName: p.ownerName,
+    displayOwner: p.displayOwner,
+    source: p.source,
+    status: p.status,
+    noPhone: p.noPhone,
   };
 }
 
@@ -187,6 +244,16 @@ function buildStaffSummary(events, dateStr, weekdayStr, dayWord) {
     return `${p.timeLabel}　${p.petName}${cut}（${p.service}）`;
   });
   return `📅 ${dayWord} ${dateStr} (${weekdayStr}) 預約 ${events.length} 件\n\n${lines.join("\n")}`;
+}
+
+function buildPendingSummary(events, dateStr, weekdayStr, dayWord) {
+  if (events.length === 0) return "";
+  const lines = events.map((p) => {
+    const cut = p.isHaircut ? " ✂️" : "";
+    const owner = p.displayOwner || "無客戶資料";
+    return `${p.timeLabel}　${owner} / ${p.petName}${cut}（${p.service}）`;
+  });
+  return `🚨 ${dayWord} ${dateStr} (${weekdayStr}) 待確認 ${events.length} 件\n\n${lines.join("\n")}`;
 }
 
 function buildReminderMessage(p, dateStr, weekdayStr, dayWord) {
@@ -234,27 +301,42 @@ function dailyPushTomorrowAppt() {
     pushLine("⚠️ 明日預約推播失敗：" + data.error);
     return;
   }
-  if (data.totalCount === 0) {
+  const confirmed = data.confirmedAppointments || [];
+  const pending = data.pendingRequests || [];
+  if (confirmed.length === 0 && pending.length === 0) {
     Logger.log("明日無預約，不推播");
     return;
   }
 
   const lines = [];
   lines.push(`📅 明日預約清單（${data.dateLabel} ${data.weekday}）`);
+
+  if (pending.length > 0) {
+    lines.push("");
+    lines.push(`🚨 待確認申請 ${pending.length} 筆（尚未成立）`);
+    pending.forEach((p) => appendAppointmentLines(lines, p, true));
+  }
+
   lines.push("");
-  data.reminders.forEach((r) => {
-    const cut = r.isHaircut ? " ✂️" : "";
-    lines.push(`🐾 ${r.time} ${r.ownerName} / ${r.petName}${cut} / ${r.service}`);
-    lines.push(`   📞 ${r.phone}`);
-  });
-  data.missingPhone.forEach((m) => {
-    const cut = m.isHaircut ? " ✂️" : "";
-    lines.push(`🐾 ${m.time} （無客戶資料）/ ${m.petName}${cut} / ${m.service}`);
-    lines.push(m.phone ? `   📞 ${m.phone}（不在客戶資料表）` : `   ⚠️ 描述欄無電話`);
-  });
+  lines.push(`✅ 已確認預約 ${confirmed.length} 筆`);
+  confirmed.forEach((p) => appendAppointmentLines(lines, p, false));
+
   lines.push("");
-  lines.push(`共 ${data.totalCount} 筆預約`);
+  lines.push(`正式 ${confirmed.length} 筆｜待確認 ${pending.length} 筆`);
   pushLine(lines.join("\n"));
+}
+
+function appendAppointmentLines(lines, p, isPending) {
+  const cut = p.isHaircut ? " ✂️" : "";
+  const owner = p.displayOwner || (p.source === "manual" ? "店家手動" : "無客戶資料");
+  lines.push(`🐾 ${p.time} ${owner} / ${p.petName}${cut} / ${p.service}`);
+  if (p.phone) {
+    lines.push(`   📞 ${p.phone}${!p.ownerName ? "（不在客戶資料表）" : ""}`);
+  } else if (!isPending && p.source === "manual") {
+    lines.push("   ☎️ 無電話・店家手動確認");
+  } else {
+    lines.push("   ⚠️ 無聯絡電話");
+  }
 }
 
 // ============ LINE 推播共用函式（從 ScriptProperties 讀 token） ============
