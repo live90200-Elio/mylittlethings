@@ -203,11 +203,10 @@ GitHub Pages 上的 `customer.html` 是公開檔案，任何人都可能開啟�
 
 ```js
 const ALLOWED_LINE_USER_IDS = {
-  "Uc91d607de27558c937af89be42699678": "員工A",
-  "U5098240716740dd49287db197da9c878": "員工B",
-  "U61199309b9ff3f86b4872f1aeb147418": "員工C",
-  "Udb797fdc8b926bff6f972be748450ecb": "員工D"
+  "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "員工A",
+  "Uyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy": "員工B"
 };
+// 真實 userId 清單只放 private repo（littlethingCustomer/寵美查詢API/README.md），不進公開 repo
 ```
 
 新增或移除可查詢人員時，只修改這個白名單，然後重新部署 Apps Script 新版本。
