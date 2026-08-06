@@ -191,7 +191,7 @@ GitHub Pages 上的 `customer.html` 是公開檔案，任何人都可能開啟�
 5. 前端呼叫 Apps Script Web App，傳送 `action=customers` 與 `token=<LINE access token>`。
 6. Apps Script 用 `UrlFetchApp.fetch("https://api.line.me/v2/profile")` 向 LINE 官方驗證 token。
 7. LINE 回傳真正的 `userId`。
-8. Apps Script 比對 `ALLOWED_LINE_USER_IDS` 白名單。
+8. Apps Script 比對白名單（檔案 A「員工白名單」分頁；讀不到才退回 `ALLOWED_LINE_USER_IDS`）。
 9. 只有白名單內的 LINE userId 才回傳客戶資料。
 10. 未授權帳號回傳：`此帳號未授權，請聯絡店長`。
 
@@ -199,7 +199,19 @@ GitHub Pages 上的 `customer.html` 是公開檔案，任何人都可能開啟�
 
 ### 目前允許查看資料的 LINE userId
 
-白名單位置：`Code.gs`
+**白名單位置：檔案 A「員工白名單」分頁**（分頁不存在時第一次執行會自動建立）
+
+| 欄 | 內容 | 說明 |
+|---|---|---|
+| A | 姓名 | 結單頁「誰結的單」按鈕顯示這個名字 |
+| B | LINE User ID | `U` 開頭 32 碼 |
+| C | 啟用 | 留白／`是` = 可用；`否`／`停用`／`離職` = 擋掉 |
+| D | 備註 | 到職／離職日期等 |
+
+員工流動時**只改這張表**：新人加一列、離職把 C 欄改「否」。
+存檔即生效 —— 不用改 code、不用重新部署 Apps Script、不用重推 GitHub Pages。
+
+`Code.gs` 的 `ALLOWED_LINE_USER_IDS` 只剩兩個角色：首次建表的種子，以及讀不到表時的保險絲。
 
 ```js
 const ALLOWED_LINE_USER_IDS = {
@@ -209,7 +221,8 @@ const ALLOWED_LINE_USER_IDS = {
 // 真實 userId 清單只放 private repo（littlethingCustomer/寵美查詢API/README.md），不進公開 repo
 ```
 
-新增或移除可查詢人員時，只修改這個白名單，然後重新部署 Apps Script 新版本。
+> 保險絲設計：分頁被清空、全部停用或讀表出錯時，會退回上面這份常數，避免整店被鎖在門外。
+> 也因此「在表上把所有人停用」不會生效，這是刻意的。
 
 ### Google Sheets 欄位
 

@@ -1218,8 +1218,10 @@
     const CUSTOMERS_VIA_POST = false;
 
     // 美容師清單（公用平板用：自己選名字後寫進 Sheets「美容師」欄 / 結單備註）
-    // 要改名字直接改這個陣列即可，不用動其他 code
-    const OPERATORS = ["Elio", "美月兒", "shan🌸"];
+    // 2026-08-06 起改由後端回傳（payload.operators ← 檔案 A「員工白名單」分頁），
+    // 員工來去只要改那張表，不用改這裡也不用重推 GitHub Pages。
+    // 下面這份只在「後端還沒更新／讀不到白名單」時當備援。
+    const OPERATORS_FALLBACK = ["Elio", "美月兒", "shan🌸"];
 
     // 登入者名字改由後端驗證後回傳（payload.viewer.name）自動帶入，前端不再存 userId 明文對照
     // （2026-07-04 安全修補：原本硬編真實 userId↔姓名，會把員工/老闆識別碼洩漏到公開 repo）
@@ -1258,6 +1260,7 @@
       checkoutMode: "guest",          // "guest" | "credit" | "monthly"
       payment: "現金",                // 散客付款方式
       operator: "",                   // 結單者名稱（員工自己選）
+      operators: OPERATORS_FALLBACK.slice(),  // 美容師按鈕清單（後端「員工白名單」分頁；舊後端沒回就用備援）
       viewerName: "",                 // 登入員工名字（後端 verify 回傳，用於自動帶入）
       services: DEFAULT_SERVICES.slice(),  // 服務項目（複選；3 個 mode 共用，切 mode/送出後重置）
       selectedCustomer: null,         // 儲值/包月選定的客戶
@@ -1467,7 +1470,7 @@
     }
 
     function renderOperatorChips() {
-      el.operatorChips.innerHTML = OPERATORS.map(name => `
+      el.operatorChips.innerHTML = state.operators.map(name => `
         <button type="button" class="operator-chip" data-operator="${escapeAttr(name)}">${escapeHtml(name)}</button>
       `).join("");
       Array.from(el.operatorChips.querySelectorAll(".operator-chip")).forEach(chip => {
@@ -1556,6 +1559,14 @@
           if (!payload.ok) throw new Error(payload.message || "讀取失敗");
         }
         state.viewerName = (payload.viewer && payload.viewer.name) || "";
+        // 美容師清單：後端「員工白名單」分頁優先，舊後端沒回這個欄位就退回備援陣列
+        const nextOperators = Array.isArray(payload.operators) && payload.operators.length
+          ? payload.operators
+          : OPERATORS_FALLBACK.slice();
+        const operatorsChanged = nextOperators.join(" ") !== state.operators.join(" ");
+        state.operators = nextOperators;
+        // 重新整理時名單有變才重畫（避免洗掉員工已選好的結單者）
+        if (operatorsChanged && el.operatorChips.children.length) renderOperatorChips();
         state.customers = Array.isArray(payload.customers) ? payload.customers : [];
         state.cardTypes = Array.isArray(payload.cardTypes) && payload.cardTypes.length
           ? payload.cardTypes

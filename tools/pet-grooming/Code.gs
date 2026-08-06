@@ -19,6 +19,11 @@
  *
  * 卡別設定分頁 schema（檔案 B，選用；沒有此分頁 = 單一洗澡卡模式）：
  * A 卡名 | B 價格 | C 含次數 | D 期限天數 | E 適用服務 | F 顯示順序 | G 啟用
+ *
+ * 員工白名單分頁 schema（檔案 A，2026-08-06 新增；分頁不存在會自動建立）：
+ * A 姓名 | B LINE User ID | C 啟用 | D 備註
+ * 　→ 誰能登入查詢／結單、結單頁「誰結的單」有哪些按鈕，都由這張表決定。
+ * 　→ 員工來去只要改這張表（新增一列 / 把「啟用」改成「否」），不用改 code、不用重新部署。
  */
 
 const SHEET_NAME = "客戶資料";
@@ -37,13 +42,88 @@ const MONTHLY_DEFAULT_PRICE = 1500;
 const DEFAULT_CARD_NAME = "洗澡卡";
 
 // ⚠️ 真實 userId 僅存 GAS 編輯器（線上）與 private 備份 repo；公開母版用佔位符，避免洩漏員工/老闆識別碼。
-// 部署到 GAS 時換成真實 userId↔名字（或改從 ScriptProperties 讀）。
+// 👉 2026-08-06 起這份常數只是「種子＋保險絲」：實際白名單讀檔案 A「員工白名單」分頁（見 loadStaff_）。
+//    第一次執行會自動用這裡的內容建出分頁；之後員工來去只要改那張表，不用改 code、不用重新部署。
 const ALLOWED_LINE_USER_IDS = {
   "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx01": "員工A",
   "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx02": "員工B",
   "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx03": "員工C",
   "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx04": "老闆"
 };
+
+const SHEET_STAFF = "員工白名單";  // 檔案 A（容器綁定）；新增/移除員工改這張表即可
+
+/**
+ * 員工白名單 —— 檔案 A「員工白名單」分頁
+ *
+ * schema（header-based，欄序可調、可加欄）：
+ *   姓名 | LINE User ID | 啟用 | 備註
+ *   啟用欄：留白 / 是 / Y / TRUE / 1 = 可用；否 / N / FALSE / 0 / 停用 / 離職 = 擋掉
+ *          （離職不用刪列，改這一格就好，之後回鍋改回「是」）
+ *
+ * 三段防呆（避免整店被鎖在門外）：
+ *   1. 分頁不存在 → 自動用 ALLOWED_LINE_USER_IDS 建表並填入
+ *   2. 分頁存在但沒有任何啟用的人 / 缺必要欄位 → 退回 ALLOWED_LINE_USER_IDS
+ *   3. 讀表出錯 → 退回 ALLOWED_LINE_USER_IDS
+ *
+ * @return {{map: Object.<string,string>, names: string[]}} map = userId→姓名；names = 結單頁「誰結的單」按鈕清單
+ */
+function loadStaff_() {
+  const fallback = {
+    map: ALLOWED_LINE_USER_IDS,
+    names: Object.keys(ALLOWED_LINE_USER_IDS).map(function (id) { return ALLOWED_LINE_USER_IDS[id]; })
+  };
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(SHEET_STAFF);
+    if (!sheet) sheet = seedStaffSheet_(ss);
+
+    const values = sheet.getDataRange().getValues();
+    if (values.length < 2) return fallback;
+
+    const header = values[0].map(function (h) { return String(h).trim(); });
+    const colName = header.indexOf("姓名");
+    const colId = header.indexOf("LINE User ID");
+    const colOn = header.indexOf("啟用");
+    if (colName < 0 || colId < 0) return fallback;
+
+    const map = {};
+    const names = [];
+    for (let i = 1; i < values.length; i++) {
+      const name = cleanText_(values[i][colName]);
+      const id = cleanText_(values[i][colId]);
+      if (!name || !id) continue;
+      if (colOn >= 0 && !isStaffEnabled_(values[i][colOn])) continue;
+      map[id] = name;
+      if (names.indexOf(name) === -1) names.push(name);
+    }
+    if (!names.length) return fallback;
+    return { map: map, names: names };
+  } catch (err) {
+    return fallback;
+  }
+}
+
+// 「啟用」欄判讀：留白視為啟用（新增一列只填姓名+ID 就能用）
+function isStaffEnabled_(value) {
+  const s = String(value === null || value === undefined ? "" : value).trim().toUpperCase();
+  if (!s) return true;
+  return ["否", "N", "NO", "FALSE", "0", "停用", "離職"].indexOf(s) === -1;
+}
+
+// 首次執行：把程式碼裡的白名單搬進試算表
+function seedStaffSheet_(ss) {
+  const sheet = ss.insertSheet(SHEET_STAFF);
+  sheet.appendRow(["姓名", "LINE User ID", "啟用", "備註"]);
+  Object.keys(ALLOWED_LINE_USER_IDS).forEach(function (id) {
+    sheet.appendRow([ALLOWED_LINE_USER_IDS[id], id, "是", "由程式碼白名單自動搬移"]);
+  });
+  sheet.getRange(1, 1, 1, 4).setFontWeight("bold").setBackground("#f0f0f0");
+  sheet.getRange("B:B").setNumberFormat("@");  // userId 強制純文字
+  sheet.setColumnWidths(1, 4, 170);
+  sheet.setFrozenRows(1);
+  return sheet;
+}
 
 function doGet(e) {
   try {
@@ -59,8 +139,9 @@ function doGet(e) {
 
     const token = getParam_(e, "token");
     const profile = verifyLineAccessToken_(token);
+    const staff = loadStaff_();
 
-    if (!profile.userId || !ALLOWED_LINE_USER_IDS[profile.userId]) {
+    if (!profile.userId || !staff.map[profile.userId]) {
       return json_({
         ok: false,
         code: "FORBIDDEN",
@@ -72,9 +153,10 @@ function doGet(e) {
       ok: true,
       viewer: {
         userId: profile.userId,
-        name: ALLOWED_LINE_USER_IDS[profile.userId],
+        name: staff.map[profile.userId],
         displayName: profile.displayName || ""
       },
+      operators: staff.names,   // 結單頁「誰結的單」按鈕清單（前端不再寫死）
       customers: readCustomers_(),
       cardTypes: loadCardTypes_(),
       updatedAt: new Date().toISOString()
@@ -116,11 +198,12 @@ function doPost(e) {
     }
 
     const profile = verifyLineAccessToken_(data.token);
-    if (!profile.userId || !ALLOWED_LINE_USER_IDS[profile.userId]) {
+    const staff = loadStaff_();
+    if (!profile.userId || !staff.map[profile.userId]) {
       return json_({ ok: false, code: "FORBIDDEN", message: "此帳號未授權，請聯絡店長" });
     }
     // 公用平板：員工自己選名字（覆蓋帳號白名單對應），沒選才 fallback
-    const operatorName = cleanText_(data.operator) || ALLOWED_LINE_USER_IDS[profile.userId];
+    const operatorName = cleanText_(data.operator) || staff.map[profile.userId];
 
     if (data.type === "guest")   return submitGuest_(data, operatorName);
     if (data.type === "credit")  return submitCredit_(data, operatorName);
