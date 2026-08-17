@@ -108,6 +108,19 @@
   }
   .notice-box li { margin-left: 16px; margin-bottom: 2px; }
   .notice-box strong { color: #8a5a2b; }
+  .notice-box .refund-warning {
+    margin: 10px 0 8px;
+    padding: 10px 12px;
+    list-style-position: inside;
+    background: #fff0f0;
+    border: 2px solid #d33b3b;
+    border-radius: 10px;
+    color: #a32121;
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 1.55;
+  }
+  .notice-box .refund-warning strong { color: #8d1515; }
 
   /* === 最近交易表 === */
   .recent-table {
@@ -219,7 +232,7 @@
       <li>儲值金額不限時間使用</li>
       <li>贈送部分限<strong>第二次起</strong>，<strong>45 天內</strong>使用</li>
       <li>儲值<strong>不限貓狗</strong>，可共用</li>
-      <li>儲值無法退費，僅限美容服務，請謹慎思考</li>
+      <li class="refund-warning">⚠️ 儲值後<strong>無法退費／退款</strong>，僅限美容服務使用，請確認後再儲值</li>
       <li>本店擁有修改活動辦法之權利</li>
     </ul>
   </div>
@@ -244,6 +257,9 @@
     <div class="row">付款金額：<strong>NT$<span id="mPay"></span></strong></div>
     <div class="row">贈送金額：<strong>NT$<span id="mBonus"></span></strong></div>
     <div class="row">總計可用：<strong>NT$<span id="mTotal"></span></strong></div>
+    <div style="margin-top:12px; padding:10px 12px; background:#fff0f0; border:2px solid #d33b3b; border-radius:10px; color:#a32121; font-size:15px; font-weight:800; line-height:1.55;">
+      ⚠️ 儲值後<strong>無法退費／退款</strong>，僅限美容服務使用
+    </div>
     <p style="font-size:12.5px; color:#888; margin-top:10px;">
       送出後我們會通知店家，由店家聯絡您確認付款方式。
     </p>
